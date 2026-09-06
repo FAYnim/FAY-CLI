@@ -151,6 +151,11 @@ export function showModelMenu(items, options = {}) {
     const activeIdx = items.findIndex((it) => it.isActive);
     if (activeIdx >= 0) selectedIndex = activeIdx;
 
+    // Ensure input is resumed so event loop does not exit while waiting for menu interaction
+    if (typeof input.resume === 'function') {
+      input.resume();
+    }
+
     // Ensure keypress events are emitted on the input stream
     if (typeof input.setRawMode === 'function') {
       try {

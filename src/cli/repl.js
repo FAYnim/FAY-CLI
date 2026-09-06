@@ -182,20 +182,27 @@ export async function startRepl(options = {}) {
       // back to the REPL and being interpreted as SIGINT/exit.
       // No-op in TTY mode, where the prompt editor owns stdin.
       pausePrompt(input);
-      const slashResult = await executeSlashCommand(line, {
-        orchestrator,
-        configMgr,
-        logger,
-        stream: output,
-        input,
-        thoughtDisplay,
-        onWizardActive: (active) => {
-          _wizardActive = active;
-        },
-      });
-      resumePrompt(input);
+      let slashResult = { handled: false };
+      try {
+        slashResult = await executeSlashCommand(line, {
+          orchestrator,
+          configMgr,
+          logger,
+          stream: output,
+          input,
+          thoughtDisplay,
+          onWizardActive: (active) => {
+            _wizardActive = active;
+          },
+        });
+      } catch (err) {
+        logger.error(`Slash command failed: ${err.message}`);
+        output.write(`\n${ansi.red('✖')} Command failed: ${err.message}\n\n`);
+      } finally {
+        resumePrompt(input);
+      }
 
-      if (slashResult.action === 'exit') {
+      if (slashResult?.action === 'exit') {
         isClosing = true;
         break;
       }
