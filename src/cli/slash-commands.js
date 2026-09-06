@@ -111,9 +111,7 @@ export async function executeSlashCommand(input, context = {}) {
     case 'plan': {
       if (!orchestrator) return { handled: true, error: true, message: 'No active orchestrator' };
       if (orchestrator.getMode?.() === 'plan') {
-        stream.write(
-          `\n${ansi.yellow('Already in Plan Mode.')} Active plan: ${ansi.cyan(orchestrator.getActivePlanPath?.())}\n\n`,
-        );
+        stream.write(`\n${ansi.yellow('⚠')} Already in Plan Mode.\n\n`);
         return { handled: true, action: 'plan', planPath: orchestrator.getActivePlanPath?.() };
       }
       const plansDir = path.join(orchestrator.workingDir, '.fay', 'plans');
@@ -125,35 +123,23 @@ export async function executeSlashCommand(input, context = {}) {
       fs.writeFileSync(planFile, initialContent, 'utf-8');
       orchestrator.setMode?.('plan', planFile);
 
-      const box = renderBox(
-        `Entered ${ansi.bold(ansi.yellow('PLAN MODE'))}\nDraft created: ${ansi.cyan(planFile)}\nTools restricted to read-only & .fay/plans/\nType ${ansi.cyan('/build')} when ready to execute.`,
-        {
-          title: 'Plan Mode Active',
-          borderColor: 'yellow',
-          borderStyle: 'round',
-        },
+      stream.write(
+        `\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.yellow('Plan Mode'))}.\n\n`,
       );
-      stream.write(`\n${box}\n\n`);
       return { handled: true, action: 'plan', planPath: planFile };
     }
 
     case 'build': {
       if (!orchestrator) return { handled: true, error: true, message: 'No active orchestrator' };
       if (orchestrator.getMode?.() === 'build') {
-        stream.write(`\n${ansi.cyan('Already in Build Mode.')} Ready for commands.\n\n`);
+        stream.write(`\n${ansi.cyan('ℹ')} Already in Build Mode.\n\n`);
         return { handled: true, action: 'build' };
       }
       const activePlan = orchestrator.getActivePlanPath?.();
       orchestrator.setMode?.('build', null);
-      const box = renderBox(
-        `Switched to ${ansi.bold(ansi.green('BUILD MODE'))}\nFull toolset activated.${activePlan ? `\nPlan target: ${ansi.cyan(activePlan)}` : ''}`,
-        {
-          title: 'Build Mode Active',
-          borderColor: 'green',
-          borderStyle: 'round',
-        },
+      stream.write(
+        `\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.green('Build Mode'))}.\n\n`,
       );
-      stream.write(`\n${box}\n\n`);
       return { handled: true, action: 'build', planPath: activePlan };
     }
 
