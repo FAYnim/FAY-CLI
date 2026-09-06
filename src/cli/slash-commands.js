@@ -3,6 +3,7 @@
  * Handles in-session commands (/help, /model, /session, /clear, /config, /exit)
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { compactSession } from '../agent/compactor.js';
 import { estimateSessionTokens } from '../agent/pruner.js';
@@ -16,6 +17,11 @@ import { runProviderAddWizard } from './provider-wizard.js';
 
 export const SLASH_COMMANDS_HELP = [
   { cmd: '/help', desc: 'Show this slash commands help menu' },
+  {
+    cmd: '/plan [title]',
+    desc: 'Enter Plan Mode (read-only research & plan drafting in .fay/plans/)',
+  },
+  { cmd: '/build', desc: 'Exit Plan Mode and switch to Build Mode to execute code changes' },
   { cmd: '/provider [id]', desc: 'Show active provider or switch provider + persist' },
   { cmd: '/provider list', desc: 'List configured providers' },
   { cmd: '/provider add [id]', desc: 'Add a new provider via interactive wizard' },
@@ -100,6 +106,55 @@ export async function executeSlashCommand(input, context = {}) {
       });
       stream.write(`\n${box}\n\n`);
       return { handled: true, action: 'help' };
+    }
+
+    case 'plan': {
+      if (!orchestrator) return { handled: true, error: true, message: 'No active orchestrator' };
+      if (orchestrator.getMode?.() === 'plan') {
+        stream.write(
+          `\n${ansi.yellow('Already in Plan Mode.')} Active plan: ${ansi.cyan(orchestrator.getActivePlanPath?.())}\n\n`,
+        );
+        return { handled: true, action: 'plan', planPath: orchestrator.getActivePlanPath?.() };
+      }
+      const plansDir = path.join(orchestrator.workingDir, '.fay', 'plans');
+      fs.mkdirSync(plansDir, { recursive: true });
+      const titleSlug = args.join('-').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'task';
+      const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+      const planFile = path.join(plansDir, `plan-${timestamp}-${titleSlug}.md`);
+      const initialContent = `# Plan: ${args.join(' ') || 'Untitled Plan'}\n\n- Created: ${new Date().toISOString()}\n- Status: Draft\n\n## Context & Findings\n\n## Action Checklist\n- [ ] 1. Initial investigation\n\n## Verification & Tests\n`;
+      fs.writeFileSync(planFile, initialContent, 'utf-8');
+      orchestrator.setMode?.('plan', planFile);
+
+      const box = renderBox(
+        `Entered ${ansi.bold(ansi.yellow('PLAN MODE'))}\nDraft created: ${ansi.cyan(planFile)}\nTools restricted to read-only & .fay/plans/\nType ${ansi.cyan('/build')} when ready to execute.`,
+        {
+          title: 'Plan Mode Active',
+          borderColor: 'yellow',
+          borderStyle: 'round',
+        },
+      );
+      stream.write(`\n${box}\n\n`);
+      return { handled: true, action: 'plan', planPath: planFile };
+    }
+
+    case 'build': {
+      if (!orchestrator) return { handled: true, error: true, message: 'No active orchestrator' };
+      if (orchestrator.getMode?.() === 'build') {
+        stream.write(`\n${ansi.cyan('Already in Build Mode.')} Ready for commands.\n\n`);
+        return { handled: true, action: 'build' };
+      }
+      const activePlan = orchestrator.getActivePlanPath?.();
+      orchestrator.setMode?.('build', null);
+      const box = renderBox(
+        `Switched to ${ansi.bold(ansi.green('BUILD MODE'))}\nFull toolset activated.${activePlan ? `\nPlan target: ${ansi.cyan(activePlan)}` : ''}`,
+        {
+          title: 'Build Mode Active',
+          borderColor: 'green',
+          borderStyle: 'round',
+        },
+      );
+      stream.write(`\n${box}\n\n`);
+      return { handled: true, action: 'build', planPath: activePlan };
     }
 
     case 'provider': {
