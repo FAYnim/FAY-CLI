@@ -94,15 +94,29 @@ export class AgentOrchestrator {
       this.securityGuard.setMode(this.mode);
     }
 
+    // Base custom system prompt if explicitly supplied
+    this.customSystemInstruction = options.systemInstruction || null;
+
     // Tools
     this.tools = options.tools || getToolDeclarations();
 
     // System prompt
-    this.systemInstruction =
-      options.systemInstruction ||
-      buildSystemPrompt({
-        workingDir: this.workingDir,
-      });
+    this.systemInstruction = this.getEffectiveSystemInstruction();
+  }
+
+  /**
+   * Generates dynamic system instruction based on current mode and plan
+   * @returns {string}
+   */
+  getEffectiveSystemInstruction() {
+    if (this.customSystemInstruction) {
+      return this.customSystemInstruction;
+    }
+    return buildSystemPrompt({
+      workingDir: this.workingDir,
+      mode: this.mode,
+      activePlanPath: this.activePlanPath,
+    });
   }
 
   /**
@@ -294,7 +308,7 @@ export class AgentOrchestrator {
         streamResult = await this.llmClient.generateStream({
           contents: prunedContents,
           tools: this.getEffectiveTools(),
-          systemInstruction: this.systemInstruction,
+          systemInstruction: this.getEffectiveSystemInstruction(),
           onToken: (token) => {
             if (typeof options.onToken === 'function') {
               options.onToken(token);

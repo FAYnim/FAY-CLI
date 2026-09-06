@@ -18,3 +18,17 @@ test('buildSystemPrompt includes Plan Mode restrictions and plan path when in pl
   assert.ok(prompt.includes('.fay/plans/plan-123.md'));
   assert.ok(prompt.includes('/build'));
 });
+
+test('AgentOrchestrator updates getEffectiveSystemInstruction() when mode changes', async () => {
+  const { AgentOrchestrator } = await import('../src/agent/orchestrator.js');
+  const orchestrator = new AgentOrchestrator({ autoApprove: true });
+  assert.ok(orchestrator.getEffectiveSystemInstruction().includes('ACTIVE MODE: BUILD MODE'));
+
+  orchestrator.setMode('plan', '.fay/plans/test-plan.md');
+  const planInstruction = orchestrator.getEffectiveSystemInstruction();
+  assert.ok(planInstruction.includes('ACTIVE MODE: PLAN MODE'));
+  assert.ok(planInstruction.includes('.fay/plans/test-plan.md'));
+
+  orchestrator.setMode('build');
+  assert.ok(orchestrator.getEffectiveSystemInstruction().includes('ACTIVE MODE: BUILD MODE'));
+});
