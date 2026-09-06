@@ -261,6 +261,30 @@ describe('Step 2: Interactive TUI Model Menu (src/ui/model-menu.js)', () => {
     assert.deepEqual(res, { cancelled: true });
   });
 
+  test('showModelMenu: calls input.resume() to keep event loop alive', async () => {
+    let resumed = false;
+    const input = new MockTtyInput();
+    input.resume = () => {
+      resumed = true;
+    };
+    const output = new PassThrough();
+
+    const promise = showModelMenu(makeItems(), {
+      input,
+      output,
+      activeProvider: 'gemini',
+      activeModel: 'gemini-2.5-flash',
+      enabled: true,
+    });
+
+    setImmediate(() => {
+      input.pressKey({ name: 'escape' });
+    });
+
+    await promise;
+    assert.equal(resumed, true);
+  });
+
   test('showModelMenu: ctrl-c cancels the menu', async () => {
     const input = new MockTtyInput();
     const output = new PassThrough();
