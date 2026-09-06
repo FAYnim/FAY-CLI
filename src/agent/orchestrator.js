@@ -54,6 +54,8 @@ export class AgentOrchestrator {
     this.compactTimeoutMs = options.compactTimeoutMs ?? 30000;
     this.logger = options.logger || defaultLogger;
     this.locale = options.locale;
+    this.mode = options.mode || 'build';
+    this.activePlanPath = options.activePlanPath || null;
 
     // Security Guard
     this.securityGuard =
@@ -87,6 +89,11 @@ export class AgentOrchestrator {
         workingDir: this.workingDir,
       });
 
+    // Sync mode with security guard if available
+    if (this.securityGuard && typeof this.securityGuard.setMode === 'function') {
+      this.securityGuard.setMode(this.mode);
+    }
+
     // Tools
     this.tools = options.tools || getToolDeclarations();
 
@@ -104,6 +111,47 @@ export class AgentOrchestrator {
    */
   getSession() {
     return this.session;
+  }
+
+  /**
+   * Gets current execution mode ('build' | 'plan')
+   * @returns {string}
+   */
+  getMode() {
+    return this.mode;
+  }
+
+  /**
+   * Gets active plan file path if in plan mode
+   * @returns {string|null}
+   */
+  getActivePlanPath() {
+    return this.activePlanPath;
+  }
+
+  /**
+   * Sets current execution mode and optional active plan path
+   * @param {'build'|'plan'} mode
+   * @param {string|null} [planPath=null]
+   */
+  setMode(mode, planPath = null) {
+    this.mode = mode === 'plan' ? 'plan' : 'build';
+    this.activePlanPath = planPath ?? (this.mode === 'build' ? null : this.activePlanPath);
+    if (this.securityGuard && typeof this.securityGuard.setMode === 'function') {
+      this.securityGuard.setMode(this.mode);
+    }
+  }
+
+  /**
+   * Returns effective tools allowed for the current mode
+   * @returns {Array<object>}
+   */
+  getEffectiveTools() {
+    if (this.mode !== 'plan') {
+      return this.tools;
+    }
+    const disallowedInPlan = new Set(['patch_file', 'execute_command', 'git_add_commit']);
+    return this.tools.filter((t) => !disallowedInPlan.has(t.name));
   }
 
   /**
@@ -245,7 +293,7 @@ export class AgentOrchestrator {
       try {
         streamResult = await this.llmClient.generateStream({
           contents: prunedContents,
-          tools: this.tools,
+          tools: this.getEffectiveTools(),
           systemInstruction: this.systemInstruction,
           onToken: (token) => {
             if (typeof options.onToken === 'function') {
