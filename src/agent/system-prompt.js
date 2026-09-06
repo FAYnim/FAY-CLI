@@ -88,6 +88,26 @@ You are faycli (FAY CLI), an autonomous, highly capable AI assistant and softwar
    - Never just return a code block in text when asked to create a file; you MUST call the tool to write it to disk.
 `.trim();
 
+export function buildModeInstructions(mode = 'build', activePlanPath = null) {
+  if (mode === 'plan') {
+    return `
+### ACTIVE MODE: PLAN MODE (READ-ONLY ANALYSIS & PLANNING)
+- You are currently in PLAN MODE. You are in read-only analysis and planning mode.
+- DO NOT attempt to modify, patch, or delete project source code.
+- DO NOT attempt to execute shell commands for system modification or building.
+- Focus on inspecting files, analyzing architecture, and proposing concrete steps.
+- You may only write or update the active plan file${activePlanPath ? ` at: \`${activePlanPath}\`` : ' inside `.fay/plans/`'}.
+- When ready to execute changes, inform the user to switch to Build Mode using \`/build\`.
+`.trim();
+  }
+
+  return `
+### ACTIVE MODE: BUILD MODE (EXECUTION)
+- You are in standard BUILD MODE with full permissions to read, write, patch files, and execute shell commands.
+- Verify changes after editing and proceed autonomously.
+`.trim();
+}
+
 /**
  * Builds the complete system instruction string for the LLM
  *
@@ -95,6 +115,8 @@ You are faycli (FAY CLI), an autonomous, highly capable AI assistant and softwar
  * @param {string} [options.customInstructions] - Custom user or project prompt
  * @param {string} [options.workingDir] - Custom working directory
  * @param {object} [options.envOverrides] - Environment overrides for testing
+ * @param {string} [options.mode='build'] - Current active mode ('build' | 'plan')
+ * @param {string|null} [options.activePlanPath=null] - Active plan file path if in plan mode
  * @returns {string}
  */
 export function buildSystemPrompt(options = {}) {
@@ -108,6 +130,9 @@ export function buildSystemPrompt(options = {}) {
 
   // Core persona & instructions
   parts.push(DEFAULT_AGENT_INSTRUCTIONS);
+
+  // Mode instructions block
+  parts.push(buildModeInstructions(options.mode || 'build', options.activePlanPath));
 
   // Environment context block
   const envLines = [
