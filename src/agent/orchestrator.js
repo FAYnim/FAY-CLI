@@ -8,7 +8,7 @@ import path from 'node:path';
 import { parseTextToolCalls } from '../llm/openai.js';
 import { createLlmClient } from '../llm/registry.js';
 import { SecurityGuard } from '../security/guard.js';
-import { dispatchToolCall, getToolDeclarations } from '../tools/registry.js';
+import { dispatchToolCall, getToolDeclarations, READ_ONLY_TOOLS } from '../tools/registry.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 import { findProjectRoot } from '../utils/project.js';
 import { compactSession } from './compactor.js';
@@ -16,6 +16,7 @@ import { pruneMessages } from './pruner.js';
 import { ReflectionChecker } from './reflection.js';
 import { createSession, Session } from './session.js';
 import { buildSystemPrompt } from './system-prompt.js';
+import { partitionToolCalls } from './tool-partitioner.js';
 import {
   accumulateUsage,
   contextBudgetLimit,
@@ -364,8 +365,11 @@ export class AgentOrchestrator {
       }
       this.session.addMessage({ role: 'model', parts: modelParts });
 
-      // Step 5: Execute each tool call through Security Guard and Actuators
-      for (const fc of functionCalls) {
+      // Step 5: Execute tool calls through Security Guard and Actuators (Partitioned Concurrency)
+      const chunks = partitionToolCalls(functionCalls, READ_ONLY_TOOLS);
+      const turnResponses = new Array(functionCalls.length);
+
+      const executeSingleCall = async (fc, originalIndex) => {
         const { name, args } = fc;
 
         if (typeof options.onToolCall === 'function') {
@@ -377,6 +381,7 @@ export class AgentOrchestrator {
           securityGuard: this.securityGuard,
           baseDir: this.workingDir,
           logger: this.logger,
+          signal,
         });
 
         let responsePayload;
@@ -395,19 +400,50 @@ export class AgentOrchestrator {
             toolExecution.result !== undefined ? toolExecution.result : { status: 'ok' };
         }
 
-        executedToolCalls.push({
+        const record = {
           name,
           args,
           response: responsePayload,
           iteration: currentIteration,
-        });
+        };
 
         if (typeof options.onToolResult === 'function') {
           options.onToolResult(name, responsePayload);
         }
 
-        // Add function response to session history
-        this.session.addFunctionResponseMessage(name, responsePayload);
+        return { originalIndex, name, responsePayload, record };
+      };
+
+      for (const chunk of chunks) {
+        if (chunk.type === 'parallel') {
+          if (typeof options.onBatchStart === 'function') {
+            options.onBatchStart({ total: chunk.calls.length, parallel: true });
+          }
+
+          const chunkResults = await Promise.all(
+            chunk.calls.map((c) => executeSingleCall(c, c.originalIndex)),
+          );
+
+          for (const res of chunkResults) {
+            turnResponses[res.originalIndex] = res;
+          }
+        } else {
+          if (typeof options.onBatchStart === 'function') {
+            options.onBatchStart({ total: 1, parallel: false });
+          }
+
+          const res = await executeSingleCall(chunk.call, chunk.call.originalIndex);
+          turnResponses[res.originalIndex] = res;
+        }
+      }
+
+      // Record tool executions and commit responses to session in strict original order
+      for (let i = 0; i < turnResponses.length; i++) {
+        const item = turnResponses[i];
+        if (item) {
+          executedToolCalls.push(item.record);
+          this.session.addFunctionResponseMessage(item.name, item.responsePayload);
+        }
       }
 
       // Step 5.5: Record for reflection and run periodic check
