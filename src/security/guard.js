@@ -40,6 +40,15 @@ export class SecurityGuard {
     this.onBeforeConfirm = typeof options.onBeforeConfirm === 'function' ? options.onBeforeConfirm : null;
     this.onAfterConfirm = typeof options.onAfterConfirm === 'function' ? options.onAfterConfirm : null;
     this._stream = options.stream || null;
+    this.mode = options.mode || 'build';
+  }
+
+  /**
+   * Sets current execution mode ('build' | 'plan')
+   * @param {'build'|'plan'} mode
+   */
+  setMode(mode) {
+    this.mode = mode === 'plan' ? 'plan' : 'build';
   }
 
   /**
@@ -203,6 +212,26 @@ export class SecurityGuard {
    * @returns {Promise<{ allowed: boolean, reason?: string, resolvedPath?: string }>}
    */
   async authorize(toolName, args = {}) {
+    if (this.mode === 'plan') {
+      if (toolName === 'execute_command' || toolName === 'patch_file') {
+        return {
+          allowed: false,
+          reason: `Tool "${toolName}" is not permitted in Plan Mode. Use /build to switch mode.`,
+        };
+      }
+      if (toolName === 'write_file') {
+        const rawPath = args.filePath || '';
+        const normalized = path.normalize(rawPath).replace(/\\/g, '/');
+        const isPlanFolder = normalized.includes('/.fay/plans/') || normalized.startsWith('.fay/plans/');
+        if (!isPlanFolder) {
+          return {
+            allowed: false,
+            reason: 'File mutation is restricted to .fay/plans/ in Plan Mode. Use /build to execute.',
+          };
+        }
+      }
+    }
+
     switch (toolName) {
       case 'execute_command': {
         const { command, workingDir } = args;

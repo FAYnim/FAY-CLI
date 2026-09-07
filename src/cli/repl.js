@@ -25,6 +25,10 @@ import { executeSlashCommand, isSlashCommand } from './slash-commands.js';
 
 export const REPL_PROMPT = `${ansi.cyan(APP_NAME)} ${ansi.bold('❯')} `;
 
+export function buildReplPrompt(mode = 'build', turn = 0) {
+  return buildPrompt({ appName: APP_NAME, turn, mode });
+}
+
 /**
  * Starts the Interactive REPL Session Loop
  *
@@ -157,7 +161,7 @@ export async function startRepl(options = {}) {
     const rawInput = await promptLine({
       input,
       output,
-      prompt: buildPrompt({ appName: APP_NAME, turn: turnCount }),
+      prompt: buildReplPrompt(orchestrator.getMode?.() || 'build', turnCount),
       getSuggestions: promptSuggestions,
       onCtrlC: handleCtrlC,
     });

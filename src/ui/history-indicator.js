@@ -10,9 +10,16 @@ export function formatTurnBadge(turn) {
   return ansi.dim(ansi.yellow(`[${turn}]`));
 }
 
-export function buildPrompt({ appName, turn = 0 }) {
+export function buildPrompt({ appName, turn = 0, mode = 'build' }) {
   const badge = formatTurnBadge(turn);
+  const planBadge = mode === 'plan' ? ansi.bold(ansi.yellow('[PLAN]')) : '';
   const nameStr = ansi.cyan(appName);
   const arrow = ansi.bold('\u276F');
-  return badge ? `${nameStr} ${badge} ${arrow} ` : `${nameStr} ${arrow} `;
+
+  const parts = [nameStr];
+  if (planBadge) parts.push(planBadge);
+  if (badge) parts.push(badge);
+  parts.push(arrow);
+
+  return `${parts.join(' ')} `;
 }
