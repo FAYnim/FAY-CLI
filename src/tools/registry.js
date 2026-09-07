@@ -32,6 +32,19 @@ export const TOOLS_MAP = {
 };
 
 /**
+ * Set of tools that are idempotent and safe for concurrent execution
+ */
+export const READ_ONLY_TOOLS = new Set([
+  'read_file',
+  'grep_file',
+  'search_files',
+  'list_dir',
+  'git_status',
+  'git_diff',
+  'web_fetch',
+]);
+
+/**
  * Gemini Function Declaration Schemas for all available tools
  */
 export const TOOL_DECLARATIONS = [
