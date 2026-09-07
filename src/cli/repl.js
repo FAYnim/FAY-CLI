@@ -264,6 +264,11 @@ export async function startRepl(options = {}) {
             output.write(clean);
           }
         },
+        onBatchStart: ({ total, parallel }) => {
+          if (parallel && total > 1) {
+            spinner.start(t('runningParallelTools', { count: total }));
+          }
+        },
         onToolCall: (call) => {
           if (spinner.isSpinning()) {
             spinner.stop();

@@ -16,5 +16,6 @@
   "confirmOptNo": "2. Tolak - Batalkan tindakan",
   "confirmNavHint": "[↑/↓]: Navigasi  [Enter]: Pilih  [1/2]: Cepat  [Esc]: Tolak",
   "thoughtsOn": "Tampilan pikiran: AKTIF — langkah penalaran LLM akan ditampilkan redup",
-  "thoughtsOff": "Tampilan pikiran: NONAKTIF — langkah penalaran LLM akan disembunyikan"
+  "thoughtsOff": "Tampilan pikiran: NONAKTIF — langkah penalaran LLM akan disembunyikan",
+  "runningParallelTools": "Menjalankan {count} tool secara paralel..."
 }

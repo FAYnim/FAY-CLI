@@ -16,5 +16,6 @@
   "confirmOptNo": "2. Deny - Cancel action",
   "confirmNavHint": "[↑/↓]: Navigate  [Enter]: Select  [1/2]: Quick  [Esc]: Deny",
   "thoughtsOn": "Thought display: ON — LLM reasoning will be shown dimmed",
-  "thoughtsOff": "Thought display: OFF — LLM reasoning will be hidden"
+  "thoughtsOff": "Thought display: OFF — LLM reasoning will be hidden",
+  "runningParallelTools": "Executing {count} tools in parallel..."
 }
