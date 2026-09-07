@@ -14,7 +14,6 @@ import { closePromptLine, pausePrompt, promptLine, resumePrompt } from '../ui/pr
 import { createSpinner } from '../ui/spinner.js';
 import { createThoughtDisplay } from '../ui/thought-display.js';
 import { buildShortcutOverlay } from '../ui/shortcut-overlay.js';
-import { deriveQuickFixes, renderQuickFixBar } from '../ui/quick-fix.js';
 import { buildPrompt } from '../ui/history-indicator.js';
 import { ansi } from '../utils/ansi.js';
 import { logger as defaultLogger } from '../utils/logger.js';
@@ -290,9 +289,6 @@ export async function startRepl(options = {}) {
         output.write('\n\n');
       }
 
-      const fixes = deriveQuickFixes({ toolCalls: result.toolCalls, text: result.text });
-      const fixBar = renderQuickFixBar(fixes);
-      if (fixBar) output.write(fixBar);
     } catch (err) {
       if (spinner.isSpinning()) {
         spinner.stop();

@@ -48,7 +48,7 @@
 | 8 | **Thought/suspicion display toggle** — Show/hide LLM reasoning steps | Debugging agent behavior; user bisa hidden di TTY terbatas | ⭐ Low |
 | 9 | **Inline edit preview** — Diff view sebelum apply patch | Safety + transparency, seperti Claude Code's confirm-prompt | ⭐⭐ Medium |
 | 10 | **Keyboard shortcut reference overlay** — Tekan `?` untuk lihat semua shortcut | CLI-friendly docs di-runtime | ⭐ Low |
-| 11 | **Quick-fix suggestions** — Agent usulkan perintah umum setelah response | "Would you like me to run tests?" style | ⭐⭐ Medium |
+| ~~11~~ | ~~**Quick-fix suggestions** — Agent usulkan perintah umum setelah response~~ | ~~"Would you like me to run tests?" style~~ | ~~⭐⭐ Medium~~ ⛔ *Dihapus* |
 | 12 | **Context window usage bar** — Visual token meter di status line | Sudah ada tapi bisa diperbaiki tampilannya | ⭐ Low |
 
 ### Kategori 3: Termux-Specific Optimizations
