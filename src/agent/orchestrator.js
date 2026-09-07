@@ -257,18 +257,12 @@ export class AgentOrchestrator {
       const budgetLimit = contextBudgetLimit(this.maxContextTokens);
       if (currentTokens > budgetLimit) {
         if (typeof options.onCompactStart === 'function') options.onCompactStart();
-        let compactResult;
-        try {
-          compactResult = await compactSession(this.session, this.llmClient, {
-            archivePath: this._archivePath(),
-            logger: this.logger,
-            signal,
-            timeoutMs: this.compactTimeoutMs,
-          });
-        } catch (compactErr) {
-          // Abort during compaction propagates like any other abort.
-          throw compactErr;
-        }
+        const compactResult = await compactSession(this.session, this.llmClient, {
+          archivePath: this._archivePath(),
+          logger: this.logger,
+          signal,
+          timeoutMs: this.compactTimeoutMs,
+        });
         if (typeof options.onCompactEnd === 'function') options.onCompactEnd(compactResult);
 
         if (compactResult.compacted) {

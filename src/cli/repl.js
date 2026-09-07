@@ -243,10 +243,7 @@ export async function startRepl(options = {}) {
         },
         onToken: (token) => {
           const clean = thoughtDisplay.processToken(
-            token.replace(
-              /<\/?(?:tool_calls?|function_call|tool_sep)[^>]*>/gi,
-              '',
-            ),
+            token.replace(/<\/?(?:tool_calls?|function_call|tool_sep)[^>]*>/gi, ''),
           );
           if (!clean) return;
 
@@ -300,7 +297,6 @@ export async function startRepl(options = {}) {
         // create a single blank line before the status bar.
         output.write('\n');
       }
-
     } catch (err) {
       if (spinner.isSpinning()) {
         spinner.stop();
