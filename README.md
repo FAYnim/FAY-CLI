@@ -19,7 +19,7 @@
 - 🔒 **Security Guard** — human-in-the-loop confirmation, command blacklist, safe path jail
 - ⚡ **Ultra-Lightweight** — startup `< 300 ms`, RAM `< 50 MB` idle
 - 📱 **Termux-Native** — no `node-gyp`, no binary compilation, pure ESM Node.js
-- 🔧 **5 Local Tools** — `read_file`, `write_file`, `patch_file`, `list_dir`, `execute_command`
+- 🔧 **12 Local Tools & Parallel Execution** — `read_file`, `write_file`, `patch_file`, `list_dir`, `execute_command`, `grep_file`, `search_files`, `git_status`, `git_diff`, `git_add_commit`, `web_fetch`, `web_search` with concurrent read execution (`Promise.all`)
 - 🎨 **Rich Terminal UI** — ANSI Markdown renderer, live spinner, syntax highlighting
 - 🌐 **Multi-Provider** — 2 native adapters (Gemini, OpenAI) + unlimited OpenAI-compatible endpoints (Groq, OpenRouter, DeepSeek, Ollama, custom)
 - 🧩 **Multi-Model Catalog** — per-provider model lists with interactive TUI picker & CLI CRUD (`faycli model`)
@@ -514,39 +514,25 @@ Run the CLI only in environments where you accept that the model has your privil
 
 ---
 
-## 🔧 Local Tools (Actuators)
+## 🔧 Local Tools (Actuators) & Concurrency
 
-The AI can use 5 built-in tools to act on your local filesystem:
+faycli equips the AI agent with 12 built-in tools. Tools marked **Read-Only / Idempotent** run in parallel via `Promise.all()` whenever the LLM emits multiple calls in a single turn, cutting latency dramatically. Mutating tools run sequentially to preserve filesystem integrity.
 
-### `read_file`
-```
-Read file content with optional line-range slicing
-Args: filePath, startLine?, endLine?, encoding?
-```
+### ⚡ Parallel Execution (Read-Only)
+- `read_file` — Read file content with line slicing (`filePath`, `startLine?`, `endLine?`, `encoding?`)
+- `grep_file` — Substring or regex search across files (`query`, `dirPath?`, `pattern?`, `caseSensitive?`)
+- `search_files` — Glob file matcher (`pattern`, `dirPath?`, `maxResults?`)
+- `list_dir` — Explore directory structure with depth control (`dirPath?`, `depth?`, `showHidden?`)
+- `git_status` — Check porcelain working-tree status (`workingDir?`)
+- `git_diff` — Show unstaged/staged diff (`file?`, `staged?`, `workingDir?`)
+- `web_fetch` — Fetch and extract URL web content (`url`, `raw?`)
 
-### `write_file`
-```
-Write text content to a file (atomic write, auto-creates dirs)
-Args: filePath, content, encoding?
-```
-
-### `patch_file`
-```
-Token-efficient search-and-replace on existing files
-Args: filePath, searchString, replaceString
-```
-
-### `list_dir`
-```
-Explore directory structure with depth control
-Args: dirPath?, depth?, showHidden?
-```
-
-### `execute_command`
-```
-Run shell commands with stdout/stderr capture and timeout
-Args: command, workingDir?, timeoutMs?, env?
-```
+### 🛡️ Sequential Execution (Mutating / Interactive)
+- `write_file` — Write content atomically to disk (`filePath`, `content`, `encoding?`)
+- `patch_file` — Exact string search-and-replace patch (`filePath`, `searchString`, `replaceString`)
+- `execute_command` — Shell command execution with stdout/stderr capture (`command`, `workingDir?`)
+- `git_add_commit` — Stage and commit git changes (`message`, `all?`, `workingDir?`)
+- `web_search` — Web search via DuckDuckGo / SearXNG (`query`, `maxResults?`)
 
 ---
 
