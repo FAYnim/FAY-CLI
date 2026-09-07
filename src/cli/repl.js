@@ -145,7 +145,7 @@ export async function startRepl(options = {}) {
   const printStatusLine = () => {
     const sess = orchestrator.getSession();
     output.write(
-      `\n${renderStatusLine({
+      `${renderStatusLine({
         usage: getUsage(sess),
         contextTokens: getContextTokens(sess),
         contextBudget: contextBudgetLimit(orchestrator.maxContextTokens),
@@ -255,9 +255,14 @@ export async function startRepl(options = {}) {
           }
           if (!hasStreamedToken) {
             hasStreamedToken = true;
+            // Strip any leading newlines that the LLM emits as the first
+            // token after tool calls; we add exactly one separator here.
+            const stripped = clean.replace(/^\n+/, '');
             output.write('\n');
+            if (stripped) output.write(stripped);
+          } else {
+            output.write(clean);
           }
-          output.write(clean);
         },
         onToolCall: (call) => {
           if (spinner.isSpinning()) {
@@ -284,9 +289,11 @@ export async function startRepl(options = {}) {
       }
 
       if (!hasStreamedToken && result.text) {
-        output.write(`\n${renderMarkdown(result.text)}\n\n`);
-      } else {
-        output.write('\n\n');
+        output.write(`\n${renderMarkdown(result.text)}\n`);
+      } else if (hasStreamedToken) {
+        // Last streamed token already ends with \n; just add one more to
+        // create a single blank line before the status bar.
+        output.write('\n');
       }
 
     } catch (err) {

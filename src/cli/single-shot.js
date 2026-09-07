@@ -102,10 +102,18 @@ export async function runSingleShot(prompt, options = {}) {
         if (streamTokens) {
           if (!hasStreamedToken) {
             hasStreamedToken = true;
+            // Strip any leading newlines that the LLM emits as the first
+            // token after tool calls; we add exactly one separator here.
+            const stripped = clean.replace(/^\n+/, '');
             stream.write('\n');
+            if (stripped) {
+              stream.write(stripped);
+              streamedText += stripped;
+            }
+          } else {
+            stream.write(clean);
+            streamedText += clean;
           }
-          stream.write(clean);
-          streamedText += clean;
         }
       },
       onToolCall: (call) => {
@@ -136,9 +144,10 @@ export async function runSingleShot(prompt, options = {}) {
     // If tokens weren't streamed in real time, render Markdown now
     if (!streamTokens && result.text) {
       const formatted = renderMarkdown(result.text);
-      stream.write(`\n${formatted}\n\n`);
+      stream.write(`\n${formatted}\n`);
     } else if (hasStreamedToken) {
-      stream.write('\n\n');
+      // Last streamed token already ends with \n; no extra newline needed
+      // to avoid double blank line after the response.
     }
 
     return {
