@@ -209,6 +209,10 @@ export async function startRepl(options = {}) {
         isClosing = true;
         break;
       }
+      if (slashResult?.action === 'new_session') {
+        turnCount = 0;
+        lastIterations = 0;
+      }
       continue;
     }
 
