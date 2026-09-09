@@ -268,6 +268,7 @@ After every agent turn, a one-line usage summary appears above the next prompt:
 | `/help` | Display all available slash commands |
 | `/model [name]` | View or switch active model (interactive TUI menu on TTY) |
 | `/session` | Show current session info and ID |
+| `/new` | Start a new session in the same REPL (previous session is saved; `faycli resume <id>` to return) |
 | `/clear` | Clear conversation history |
 | `/config` | View current configuration |
 | `/exit` or `/quit` | Exit the REPL |

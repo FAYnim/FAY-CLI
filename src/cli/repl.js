@@ -8,17 +8,17 @@ import { contextBudgetLimit, getContextTokens, getUsage } from '../agent/usage.j
 import { APP_NAME } from '../config/constants.js';
 import { ConfigManager } from '../config/manager.js';
 import { loadLocale, t } from '../i18n/index.js';
+import { SecurityGuard } from '../security/guard.js';
 import { renderBanner, renderStatusLine } from '../ui/box.js';
+import { buildPrompt } from '../ui/history-indicator.js';
 import { renderMarkdown } from '../ui/markdown.js';
 import { closePromptLine, pausePrompt, promptLine, resumePrompt } from '../ui/prompt-editor.js';
+import { buildShortcutOverlay } from '../ui/shortcut-overlay.js';
 import { createSpinner } from '../ui/spinner.js';
 import { createThoughtDisplay } from '../ui/thought-display.js';
-import { buildShortcutOverlay } from '../ui/shortcut-overlay.js';
-import { buildPrompt } from '../ui/history-indicator.js';
 import { ansi } from '../utils/ansi.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 import { findProjectRoot } from '../utils/project.js';
-import { SecurityGuard } from '../security/guard.js';
 import { getSuggestions } from './autocomplete.js';
 import { executeSlashCommand, isSlashCommand } from './slash-commands.js';
 

@@ -38,7 +38,7 @@ export const SLASH_COMMANDS_HELP = [
   { cmd: '/session', desc: 'Display current session ID, token usage & stats' },
   {
     cmd: '/new',
-    desc: "Start a new session (current one is saved — use faycli resume <id> to return)",
+    desc: 'Start a new session (current one is saved — use faycli resume <id> to return)',
   },
   {
     cmd: '/compact',
@@ -121,16 +121,21 @@ export async function executeSlashCommand(input, context = {}) {
       }
       const plansDir = path.join(orchestrator.workingDir, '.fay', 'plans');
       fs.mkdirSync(plansDir, { recursive: true });
-      const titleSlug = args.join('-').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'task';
-      const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+      const titleSlug =
+        args
+          .join('-')
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '') || 'task';
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[-:T.]/g, '')
+        .slice(0, 14);
       const planFile = path.join(plansDir, `plan-${timestamp}-${titleSlug}.md`);
       const initialContent = `# Plan: ${args.join(' ') || 'Untitled Plan'}\n\n- Created: ${new Date().toISOString()}\n- Status: Draft\n\n## Context & Findings\n\n## Action Checklist\n- [ ] 1. Initial investigation\n\n## Verification & Tests\n`;
       fs.writeFileSync(planFile, initialContent, 'utf-8');
       orchestrator.setMode?.('plan', planFile);
 
-      stream.write(
-        `\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.yellow('Plan Mode'))}.\n\n`,
-      );
+      stream.write(`\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.yellow('Plan Mode'))}.\n\n`);
       return { handled: true, action: 'plan', planPath: planFile };
     }
 
@@ -142,9 +147,7 @@ export async function executeSlashCommand(input, context = {}) {
       }
       const activePlan = orchestrator.getActivePlanPath?.();
       orchestrator.setMode?.('build', null);
-      stream.write(
-        `\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.green('Build Mode'))}.\n\n`,
-      );
+      stream.write(`\n${ansi.green('✔')} Switched to ${ansi.bold(ansi.green('Build Mode'))}.\n\n`);
       return { handled: true, action: 'build', planPath: activePlan };
     }
 
@@ -604,11 +607,15 @@ export async function executeSlashCommand(input, context = {}) {
 
     case 'thoughts': {
       if (!context.thoughtDisplay) {
-        stream.write(`\n${ansi.yellow('\u26A0')} Thought display not available in this context.\n\n`);
+        stream.write(
+          `\n${ansi.yellow('\u26A0')} Thought display not available in this context.\n\n`,
+        );
         return { handled: true, action: 'thoughts_error', error: true };
       }
       const nowEnabled = context.thoughtDisplay.toggle();
-      stream.write(`\n${ansi.cyan('\u2139')} Thought display: ${nowEnabled ? ansi.green('ON') : ansi.dim('OFF')}\n\n`);
+      stream.write(
+        `\n${ansi.cyan('\u2139')} Thought display: ${nowEnabled ? ansi.green('ON') : ansi.dim('OFF')}\n\n`,
+      );
       return { handled: true, action: 'thoughts_toggle', enabled: nowEnabled };
     }
 
