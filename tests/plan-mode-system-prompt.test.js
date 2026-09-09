@@ -17,6 +17,16 @@ test('buildSystemPrompt includes Plan Mode restrictions and plan path when in pl
   assert.ok(prompt.includes('READ-ONLY'));
   assert.ok(prompt.includes('.fay/plans/plan-123.md'));
   assert.ok(prompt.includes('/build'));
+  assert.ok(prompt.includes('Writing-Plans Standard'));
+  assert.ok(prompt.includes('Zero-Placeholder Policy'));
+  assert.ok(prompt.includes('Bite-Sized Task Granularity'));
+  assert.ok(prompt.includes('Mandatory Document Format'));
+  assert.ok(prompt.includes('Agent Execution Workflow in Plan Mode'));
+});
+
+test('buildSystemPrompt in plan mode uses fallback target file path when activePlanPath is not provided', () => {
+  const prompt = buildSystemPrompt({ mode: 'plan' });
+  assert.ok(prompt.includes('.fay/plans/<YYYY-MM-DD-feature-name>.md'));
 });
 
 test('AgentOrchestrator updates getEffectiveSystemInstruction() when mode changes', async () => {
