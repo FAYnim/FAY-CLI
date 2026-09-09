@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { compactSession } from '../agent/compactor.js';
 import { estimateSessionTokens } from '../agent/pruner.js';
-import { getUsage } from '../agent/usage.js';
+import { createSession } from '../agent/session.js';
+import { getUsage, resetUsage } from '../agent/usage.js';
 import { renderBox, renderStatusCard } from '../ui/box.js';
 import { showModelMenuFromConfig } from '../ui/model-menu.js';
 import { ansi } from '../utils/ansi.js';
@@ -35,6 +36,10 @@ export const SLASH_COMMANDS_HELP = [
   { cmd: '/model remove <name>', desc: 'Remove a model from provider catalog' },
   { cmd: '/model clear', desc: 'Reset provider catalog to builtin defaults' },
   { cmd: '/session', desc: 'Display current session ID, token usage & stats' },
+  {
+    cmd: '/new',
+    desc: "Start a new session (current one is saved — use faycli resume <id> to return)",
+  },
   {
     cmd: '/compact',
     desc: 'Summarize older context now to free space (agent loop does it automatically at 92%)',
@@ -522,6 +527,49 @@ export async function executeSlashCommand(input, context = {}) {
 
       stream.write(`\n${card}\n\n`);
       return { handled: true, action: 'session_info' };
+    }
+
+    case 'new': {
+      if (!orchestrator) {
+        stream.write(`\n${ansi.yellow('⚠')} No active session context found.\n\n`);
+        return { handled: true, action: 'new_session', error: true };
+      }
+
+      const oldSession = orchestrator.session || null;
+      if (oldSession && typeof oldSession.save === 'function') {
+        try {
+          oldSession.save();
+        } catch (e) {
+          logger.warn(`Failed to persist previous session before /new: ${e.message}`);
+        }
+      }
+
+      const newSession = createSession({
+        model: oldSession?.model || orchestrator?.llmClient?.getModel?.() || undefined,
+        provider: oldSession?.provider || orchestrator?.provider || 'gemini',
+        workingDir: oldSession?.workingDir || orchestrator?.workingDir || process.cwd(),
+        sessionsDir: oldSession?.sessionsDir || undefined,
+      });
+
+      resetUsage(newSession);
+      if (typeof orchestrator.setSession === 'function') {
+        orchestrator.setSession(newSession);
+      } else {
+        orchestrator.session = newSession;
+      }
+
+      stream.write(
+        `\n${ansi.green('✔')} Started ${ansi.bold('new session')}.\n` +
+          `  Previous : ${ansi.dim(oldSession?.id || 'N/A')} ${ansi.dim('(saved — faycli resume <id> to return)')}\n` +
+          `  New      : ${ansi.bold(ansi.yellow(newSession.id))}\n\n`,
+      );
+
+      return {
+        handled: true,
+        action: 'new_session',
+        sessionId: newSession.id,
+        previousSessionId: oldSession?.id || null,
+      };
     }
 
     case 'compact': {

@@ -17,6 +17,7 @@ export const SHORTCUT_ENTRIES = [
   { key: '/help',      desc: 'Show all slash commands' },
   { key: '/model',     desc: 'Interactive model picker' },
   { key: '/session',   desc: 'Show session token usage stats' },
+  { key: '/new',       desc: 'Start a fresh session (saves current one)' },
   { key: '/compact',   desc: 'Manually compact context window' },
   { key: '/thoughts',  desc: 'Toggle LLM reasoning display' },
   { key: '/clear',     desc: 'Clear terminal screen' },
