@@ -213,6 +213,35 @@ export async function startRepl(options = {}) {
         turnCount = 0;
         lastIterations = 0;
       }
+      if (slashResult?.action === 'switch_session') {
+        const newSession = slashResult.session || orchestrator.getSession();
+        turnCount = newSession.messages ? newSession.messages.length : 0;
+        lastIterations = 0;
+
+        const titleDisplay = newSession.title ? `"${newSession.title}"` : ansi.dim('(Untitled)');
+        output.write(
+          `\n${ansi.green('✔')} Switched to session: ${ansi.bold(ansi.yellow(titleDisplay))} ${ansi.dim(`(${newSession.id})`)}\n` +
+            `  Model   : ${ansi.cyan(newSession.model || orchestrator.llmClient?.getModel() || 'default')}\n` +
+            `  Messages: ${newSession.messages?.length || 0} turn(s)\n` +
+            `${ansi.dim('─'.repeat(50))}\n`,
+        );
+
+        const msgs = newSession.getMessages ? newSession.getMessages() : newSession.messages || [];
+        if (msgs.length > 0) {
+          output.write(`${ansi.dim('Recent conversation history:')}\n\n`);
+          const recent = msgs.slice(-4);
+          for (const m of recent) {
+            const text = m.parts?.[0]?.text || '';
+            if (!text) continue;
+            if (m.role === 'user') {
+              output.write(`${ansi.bold(ansi.cyan('❯'))} ${ansi.white(text)}\n\n`);
+            } else if (m.role === 'model') {
+              output.write(`${renderMarkdown(text)}\n\n`);
+            }
+          }
+          output.write(`${ansi.dim('─'.repeat(50))}\n\n`);
+        }
+      }
       continue;
     }
 

@@ -258,5 +258,31 @@ describe('Slash Commands: /session and /resume', () => {
   });
 });
 
+import { renderMarkdown } from '../src/ui/markdown.js';
+
+describe('REPL: History Replay & Switch Synchronization', () => {
+  test('session messages replay formatting works correctly', () => {
+    const s = new Session({ id: 'sess_replay' });
+    s.addUserMessage('What is Node.js?');
+    s.addModelMessage('Node.js is an open-source JavaScript runtime environment.');
+    s.addUserMessage('How do I run tests?');
+    s.addModelMessage('Use `node --test`.');
+
+    const msgs = s.getMessages();
+    assert.equal(msgs.length, 4);
+
+    // Last 2 turns = last 4 messages
+    const recent = msgs.slice(-4);
+    assert.equal(recent[0].role, 'user');
+    assert.equal(recent[1].role, 'model');
+    assert.equal(recent[2].role, 'user');
+    assert.equal(recent[3].role, 'model');
+
+    const rendered = renderMarkdown(recent[3].parts[0].text);
+    assert.ok(rendered.includes('node --test'));
+  });
+});
+
+
 
 
