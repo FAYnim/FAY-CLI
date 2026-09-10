@@ -367,9 +367,13 @@ export class SessionManager {
 
   /**
    * Lists all saved sessions with summary metadata, sorted by updatedAt descending
+   * @param {object} [options={}]
+   * @param {string} [options.workingDir] - Filter sessions by workspace path
+   * @param {boolean} [options.all=false] - Return all sessions regardless of workingDir
    * @returns {Array<object>}
    */
-  listSessions() {
+  listSessions(options = {}) {
+    const { workingDir = null, all = false } = options;
     const dir = this.getSessionsDir();
     if (!fs.existsSync(dir)) {
       return [];
@@ -394,16 +398,28 @@ export class SessionManager {
           }
         }
 
+        const sessionWorkDir = data.workingDir || '';
+        if (!all && workingDir && sessionWorkDir) {
+          const normTarget = path.resolve(workingDir);
+          const normSess = path.resolve(sessionWorkDir);
+          if (normTarget !== normSess) {
+            continue;
+          }
+        }
+
         sessions.push({
           id: data.id || path.basename(file, '.json'),
+          title: data.title || null,
           createdAt: data.createdAt || null,
           updatedAt: data.updatedAt || null,
           model: data.model || DEFAULT_MODEL,
           provider: data.provider || 'gemini',
-          workingDir: data.workingDir || '',
+          workingDir: sessionWorkDir,
           messageCount: Array.isArray(data.messages) ? data.messages.length : 0,
           preview: lastMessageText,
+          lastMessagePreview: lastMessageText,
           filePath,
+          metadata: data.metadata || {},
         });
       } catch {
         // Skip corrupted files
@@ -416,6 +432,19 @@ export class SessionManager {
       const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return timeB - timeA;
     });
+  }
+
+  /**
+   * Renames a saved session's title
+   * @param {string} sessionId
+   * @param {string} newTitle
+   * @returns {boolean}
+   */
+  renameSession(sessionId, newTitle) {
+    if (!this.hasSession(sessionId)) return false;
+    const session = this.loadSession(sessionId);
+    session.setTitle(newTitle);
+    return this.saveSession(session);
   }
 
   /**

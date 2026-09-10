@@ -52,3 +52,70 @@ describe('Session: Title & Auto-Titling', () => {
     assert.match(s.title, /^Optimize database query/);
   });
 });
+
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach } from 'node:test';
+import { SessionManager } from '../src/agent/session.js';
+
+describe('SessionManager: Scoped Listing & Renaming', () => {
+  let tmpDir;
+  let mgr;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-sess-test-'));
+    mgr = new SessionManager({ sessionsDir: tmpDir });
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  });
+
+  test('listSessions filters by workingDir when all=false', () => {
+    const s1 = mgr.createSession({ id: 'sess_proj1', workingDir: '/workspace/project-alpha' });
+    s1.setTitle('Alpha Feature');
+    s1.addUserMessage('Implement Alpha');
+    s1.save();
+
+    const s2 = mgr.createSession({ id: 'sess_proj2', workingDir: '/workspace/project-beta' });
+    s2.setTitle('Beta Bugfix');
+    s2.addUserMessage('Fix Beta');
+    s2.save();
+
+    // Default: filters by current project
+    const alphaList = mgr.listSessions({ workingDir: '/workspace/project-alpha', all: false });
+    assert.equal(alphaList.length, 1);
+    assert.equal(alphaList[0].id, 'sess_proj1');
+    assert.equal(alphaList[0].title, 'Alpha Feature');
+
+    // All = true: returns both
+    const allList = mgr.listSessions({ workingDir: '/workspace/project-alpha', all: true });
+    assert.equal(allList.length, 2);
+  });
+
+  test('renameSession updates title in memory and on disk', () => {
+    const s = mgr.createSession({ id: 'sess_rename_test' });
+    s.addUserMessage('Initial message');
+    s.save();
+
+    const ok = mgr.renameSession('sess_rename_test', 'Renamed Title');
+    assert.equal(ok, true);
+
+    const reloaded = mgr.loadSession('sess_rename_test');
+    assert.equal(reloaded.title, 'Renamed Title');
+  });
+
+  test('listSessions safely skips corrupted JSON files without crashing', () => {
+    fs.writeFileSync(path.join(tmpDir, 'corrupt.json'), '{ broken json ...');
+    const valid = mgr.createSession({ id: 'sess_valid' });
+    valid.save();
+
+    const list = mgr.listSessions({ all: true });
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, 'sess_valid');
+  });
+});
+
