@@ -368,10 +368,11 @@ export class SessionManager {
    * @param {object} [options={}]
    * @param {string} [options.workingDir] - Filter sessions by workspace path
    * @param {boolean} [options.all=false] - Return all sessions regardless of workingDir
+   * @param {number} [options.limit=null] - Maximum number of sessions to return
    * @returns {Array<object>}
    */
   listSessions(options = {}) {
-    const { workingDir = null, all = false } = options;
+    const { workingDir = null, all = false, limit = null } = options;
     const dir = this.getSessionsDir();
     if (!fs.existsSync(dir)) {
       return [];
@@ -425,11 +426,16 @@ export class SessionManager {
     }
 
     // Sort by updatedAt descending
-    return sessions.sort((a, b) => {
+    const sorted = sessions.sort((a, b) => {
       const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return timeB - timeA;
     });
+
+    if (typeof limit === 'number' && limit > 0) {
+      return sorted.slice(0, limit);
+    }
+    return sorted;
   }
 
   /**

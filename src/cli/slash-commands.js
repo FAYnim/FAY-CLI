@@ -558,13 +558,16 @@ export async function executeSlashCommand(input, context = {}) {
 
       // Subcommand: list
       if (subCmd === 'list') {
-        const list = sessionMgr.listSessions({
+        const rawLimit = args[1] ? Number.parseInt(args[1], 10) : 5;
+        const limit = !Number.isNaN(rawLimit) && rawLimit > 0 ? rawLimit : 5;
+        const allList = sessionMgr.listSessions({
           workingDir: orchestrator.workingDir,
           all: true,
         });
-        if (list.length === 0) {
+        if (allList.length === 0) {
           stream.write(`\n${ansi.dim('No saved sessions found.')}\n\n`);
         } else {
+          const list = allList.slice(0, limit);
           const lines = list.map((s) => {
             const isAct = s.id === sess.id;
             const prefix = isAct ? ansi.green('▸ ●') : '  ○';
@@ -574,8 +577,15 @@ export async function executeSlashCommand(input, context = {}) {
             const tag = isAct ? ` ${ansi.dim('(active)')}` : '';
             return `${prefix} ${title}${tag}\n    ${ansi.dim(`${s.id} · ${s.messageCount} msgs · ${s.model}`)}`;
           });
+          if (allList.length > list.length) {
+            lines.push(
+              ansi.dim(
+                `\n  ... and ${allList.length - list.length} older session(s). Use /session list <n> to view more.`,
+              ),
+            );
+          }
           const box = renderBox(lines.join('\n'), {
-            title: 'Saved Sessions',
+            title: `Saved Sessions (Latest ${list.length})`,
             borderColor: 'cyan',
             borderStyle: 'round',
             minWidth: 50,

@@ -94,6 +94,10 @@ describe('SessionManager: Scoped Listing & Renaming', () => {
     // All = true: returns both
     const allList = mgr.listSessions({ workingDir: '/workspace/project-alpha', all: true });
     assert.equal(allList.length, 2);
+
+    // Limit = 1: returns only 1 session
+    const limitedList = mgr.listSessions({ all: true, limit: 1 });
+    assert.equal(limitedList.length, 1);
   });
 
   test('renameSession updates title in memory and on disk', () => {
@@ -255,6 +259,37 @@ describe('Slash Commands: /session and /resume', () => {
 
     assert.equal(res.handled, true);
     assert.equal(res.action, 'session_info');
+  });
+
+  test('/session list displays latest sessions with default limit of 5', async () => {
+    for (let i = 1; i <= 7; i++) {
+      const s = mgr.createSession({ id: `sess_${i}` });
+      s.addUserMessage(`Message ${i}`);
+      s.save();
+    }
+
+    const currentSess = mgr.createSession({ id: 'sess_curr' });
+    const dummyOrchestrator = {
+      session: currentSess,
+      getSession: () => currentSess,
+      workingDir: tmpDir,
+    };
+    let outputData = '';
+    const out = new PassThrough();
+    out.on('data', (chunk) => {
+      outputData += chunk.toString();
+    });
+
+    const res = await executeSlashCommand('/session list', {
+      orchestrator: dummyOrchestrator,
+      sessionManager: mgr,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'session_list');
+    assert.ok(outputData.includes('Saved Sessions (Latest 5)'));
+    assert.ok(outputData.includes('older session(s)'));
   });
 });
 

@@ -35,11 +35,14 @@ export function buildSessionMenuItems(sessions, activeSessionId) {
   }));
 }
 
-function renderFrame(items, selectedIndex, showAll, workingDir, output) {
+function renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount = items.length) {
   const scopeLabel = showAll
     ? `${ansi.yellow('All Projects')}`
     : `${ansi.cyan('Current Project')} ${ansi.dim(`(${workingDir || process.cwd()})`)}`;
-  const countLabel = `[${items.length} session${items.length === 1 ? '' : 's'}]`;
+  const countLabel =
+    totalCount > items.length
+      ? `[showing ${items.length} of ${totalCount} latest sessions]`
+      : `[${items.length} session${items.length === 1 ? '' : 's'}]`;
 
   const header = `${ansi.bold(ansi.cyan('⚡ Select a session'))}  ${ansi.dim('(↑/↓ navigate • Enter switch • a toggle all • r rename • d delete • n new • Esc cancel)')}`;
   const lines = [header, `Scope: ${scopeLabel} ${ansi.dim(countLabel)}`, ''];
@@ -73,6 +76,7 @@ function renderFrame(items, selectedIndex, showAll, workingDir, output) {
  * @param {import('../agent/session.js').SessionManager} options.sessionManager
  * @param {string} [options.activeSessionId]
  * @param {string} [options.workingDir]
+ * @param {number} [options.limit=5]
  * @param {NodeJS.ReadableStream} [options.input]
  * @param {NodeJS.WritableStream} [options.output]
  * @returns {Promise<{ cancelled: boolean, action?: 'switch'|'new', sessionId?: string, isNonTty?: boolean }>}
@@ -81,6 +85,7 @@ export async function showSessionMenu({
   sessionManager,
   activeSessionId = null,
   workingDir = process.cwd(),
+  limit = 5,
   input = process.stdin,
   output = process.stdout,
 }) {
@@ -91,10 +96,15 @@ export async function showSessionMenu({
 
   return new Promise((resolve) => {
     let showAll = false;
-    let items = buildSessionMenuItems(
-      sessionManager.listSessions({ workingDir, all: showAll }),
-      activeSessionId,
-    );
+    const fetchItems = () => {
+      const allFound = sessionManager.listSessions({ workingDir, all: showAll });
+      const totalCount = allFound.length;
+      const sliced = typeof limit === 'number' && limit > 0 ? allFound.slice(0, limit) : allFound;
+      const items = buildSessionMenuItems(sliced, activeSessionId);
+      return { items, totalCount };
+    };
+
+    let { items, totalCount } = fetchItems();
 
     let selectedIndex = 0;
     const activeIdx = items.findIndex((it) => it.isActive);
@@ -110,7 +120,7 @@ export async function showSessionMenu({
 
     let isPrompting = false;
 
-    renderFrame(items, selectedIndex, showAll, workingDir, output);
+    renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
 
     const cleanup = (result) => {
       try {
@@ -146,7 +156,7 @@ export async function showSessionMenu({
       if (key.name === 'up' || key.name === 'k') {
         if (items.length > 0) {
           selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-          renderFrame(items, selectedIndex, showAll, workingDir, output);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
         }
         return;
       }
@@ -154,7 +164,7 @@ export async function showSessionMenu({
       if (key.name === 'down' || key.name === 'j') {
         if (items.length > 0) {
           selectedIndex = (selectedIndex + 1) % items.length;
-          renderFrame(items, selectedIndex, showAll, workingDir, output);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
         }
         return;
       }
@@ -162,12 +172,11 @@ export async function showSessionMenu({
       // 'a' -> toggle all / project scoped
       if (key.name === 'a') {
         showAll = !showAll;
-        items = buildSessionMenuItems(
-          sessionManager.listSessions({ workingDir, all: showAll }),
-          activeSessionId,
-        );
+        const res = fetchItems();
+        items = res.items;
+        totalCount = res.totalCount;
         selectedIndex = Math.min(selectedIndex, Math.max(0, items.length - 1));
-        renderFrame(items, selectedIndex, showAll, workingDir, output);
+        renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
         return;
       }
 
@@ -182,7 +191,10 @@ export async function showSessionMenu({
         const target = items[selectedIndex];
         if (target.isActive) {
           output.write(`\n${ansi.yellow('⚠ Cannot delete currently active session.')}\n`);
-          setTimeout(() => renderFrame(items, selectedIndex, showAll, workingDir, output), 1500);
+          setTimeout(
+            () => renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount),
+            1500,
+          );
           return;
         }
 
@@ -195,13 +207,12 @@ export async function showSessionMenu({
           isPrompting = false;
           if (ans.trim().toLowerCase() === 'y') {
             sessionManager.deleteSession(target.id);
-            items = buildSessionMenuItems(
-              sessionManager.listSessions({ workingDir, all: showAll }),
-              activeSessionId,
-            );
+            const res = fetchItems();
+            items = res.items;
+            totalCount = res.totalCount;
             selectedIndex = Math.min(selectedIndex, Math.max(0, items.length - 1));
           }
-          renderFrame(items, selectedIndex, showAll, workingDir, output);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
         });
         return;
       }
@@ -219,12 +230,11 @@ export async function showSessionMenu({
           const newTitle = ans.trim();
           if (newTitle) {
             sessionManager.renameSession(target.id, newTitle);
-            items = buildSessionMenuItems(
-              sessionManager.listSessions({ workingDir, all: showAll }),
-              activeSessionId,
-            );
+            const res = fetchItems();
+            items = res.items;
+            totalCount = res.totalCount;
           }
-          renderFrame(items, selectedIndex, showAll, workingDir, output);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
         });
         return;
       }
