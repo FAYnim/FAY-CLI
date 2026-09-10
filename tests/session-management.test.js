@@ -172,4 +172,91 @@ describe('SessionMenu: UI & TTY Logic', () => {
   });
 });
 
+import { executeSlashCommand } from '../src/cli/slash-commands.js';
+
+describe('Slash Commands: /session and /resume', () => {
+  let tmpDir;
+  let mgr;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-slash-test-'));
+    mgr = new SessionManager({ sessionsDir: tmpDir });
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  });
+
+  test('/session rename changes active session title', async () => {
+    const dummySession = mgr.createSession({ id: 'sess_cmd_test' });
+    const dummyOrchestrator = {
+      session: dummySession,
+      getSession: () => dummySession,
+      workingDir: tmpDir,
+    };
+    const out = new PassThrough();
+
+    const res = await executeSlashCommand('/session rename New Project Task', {
+      orchestrator: dummyOrchestrator,
+      sessionManager: mgr,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'session_rename');
+    assert.equal(dummySession.title, 'New Project Task');
+  });
+
+  test('/session switch with ID returns switch_session action', async () => {
+    const s1 = mgr.createSession({ id: 'sess_target' });
+    s1.addUserMessage('Target chat');
+    s1.save();
+
+    const currentSess = mgr.createSession({ id: 'sess_curr' });
+    currentSess.save();
+
+    const dummyOrchestrator = {
+      session: currentSess,
+      getSession: () => currentSess,
+      workingDir: tmpDir,
+      setSession: (s) => {
+        dummyOrchestrator.session = s;
+      },
+    };
+    const out = new PassThrough();
+
+    const res = await executeSlashCommand('/session switch sess_target', {
+      orchestrator: dummyOrchestrator,
+      sessionManager: mgr,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'switch_session');
+    assert.equal(res.sessionId, 'sess_target');
+  });
+
+  test('/resume alias routes identically to /session', async () => {
+    const currentSess = mgr.createSession({ id: 'sess_curr' });
+    const dummyOrchestrator = {
+      session: currentSess,
+      getSession: () => currentSess,
+      workingDir: tmpDir,
+    };
+    const out = new PassThrough();
+
+    const res = await executeSlashCommand('/resume info', {
+      orchestrator: dummyOrchestrator,
+      sessionManager: mgr,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'session_info');
+  });
+});
+
+
 

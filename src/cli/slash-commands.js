@@ -7,10 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { compactSession } from '../agent/compactor.js';
 import { estimateSessionTokens } from '../agent/pruner.js';
-import { createSession } from '../agent/session.js';
+import { createSession, defaultSessionManager } from '../agent/session.js';
 import { getUsage, resetUsage } from '../agent/usage.js';
 import { renderBox, renderStatusCard } from '../ui/box.js';
 import { showModelMenuFromConfig } from '../ui/model-menu.js';
+import { showSessionMenu } from '../ui/session-menu.js';
 import { ansi } from '../utils/ansi.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 import { addModelsCli, clearModelsCli, removeModelCli } from './model-commands.js';
@@ -35,7 +36,14 @@ export const SLASH_COMMANDS_HELP = [
   { cmd: '/model add <name[,...]>', desc: 'Add model(s) to provider catalog' },
   { cmd: '/model remove <name>', desc: 'Remove a model from provider catalog' },
   { cmd: '/model clear', desc: 'Reset provider catalog to builtin defaults' },
-  { cmd: '/session', desc: 'Display current session ID, token usage & stats' },
+  {
+    cmd: '/session [switch|rename|info|list|delete]',
+    desc: 'Manage or switch sessions via interactive picker',
+  },
+  {
+    cmd: '/resume [id]',
+    desc: 'Resume or switch to a past session (opens picker if no ID)',
+  },
   {
     cmd: '/new',
     desc: 'Start a new session (current one is saved — use faycli resume <id> to return)',
@@ -97,6 +105,7 @@ export async function executeSlashCommand(input, context = {}) {
   const orchestrator = context.orchestrator;
   const inputStream = context.input || process.stdin;
   const logger = context.logger || defaultLogger;
+  const sessionMgr = context.sessionManager || defaultSessionManager;
 
   switch (command) {
     case 'help': {
@@ -504,6 +513,7 @@ export async function executeSlashCommand(input, context = {}) {
       return { handled: true, action: 'model_changed', message: newModel };
     }
 
+    case 'resume':
     case 'session': {
       if (!orchestrator?.session) {
         stream.write(`\n${ansi.yellow('⚠')} No active session context found.\n\n`);
@@ -511,12 +521,220 @@ export async function executeSlashCommand(input, context = {}) {
       }
 
       const sess = orchestrator.session;
+      const knownSubcommands = ['info', 'stats', 'rename', 'list', 'delete', 'switch'];
+      let subCmd = '';
+      if (command === 'resume') {
+        if (!args[0]) {
+          subCmd = '';
+        } else if (knownSubcommands.includes(args[0].toLowerCase())) {
+          subCmd = args[0].toLowerCase();
+        } else {
+          subCmd = 'switch';
+        }
+      } else {
+        subCmd = args[0]?.toLowerCase() || '';
+      }
+
+      // Subcommand: rename
+      if (subCmd === 'rename') {
+        const newTitle = args.slice(1).join(' ').trim();
+        if (!newTitle) {
+          stream.write(`\n${ansi.yellow('⚠')} Missing new title. Usage: /session rename <title>\n\n`);
+          return { handled: true, action: 'session_rename', error: true };
+        }
+        sess.setTitle(newTitle);
+        try {
+          sess.save();
+        } catch (e) {
+          logger.warn(`Failed to save session after rename: ${e.message}`);
+        }
+        stream.write(
+          `\n${ansi.green('✔')} Session renamed to: ${ansi.bold(ansi.yellow(newTitle))}\n\n`,
+        );
+        return { handled: true, action: 'session_rename', title: newTitle };
+      }
+
+      // Subcommand: list
+      if (subCmd === 'list') {
+        const list = sessionMgr.listSessions({
+          workingDir: orchestrator.workingDir,
+          all: true,
+        });
+        if (list.length === 0) {
+          stream.write(`\n${ansi.dim('No saved sessions found.')}\n\n`);
+        } else {
+          const lines = list.map((s) => {
+            const isAct = s.id === sess.id;
+            const prefix = isAct ? ansi.green('▸ ●') : '  ○';
+            const title = isAct
+              ? ansi.bold(ansi.yellow(s.title || '(Untitled)'))
+              : ansi.white(s.title || '(Untitled)');
+            const tag = isAct ? ` ${ansi.dim('(active)')}` : '';
+            return `${prefix} ${title}${tag}\n    ${ansi.dim(`${s.id} · ${s.messageCount} msgs · ${s.model}`)}`;
+          });
+          const box = renderBox(lines.join('\n'), {
+            title: 'Saved Sessions',
+            borderColor: 'cyan',
+            borderStyle: 'round',
+            minWidth: 50,
+          });
+          stream.write(`\n${box}\n\n`);
+        }
+        return { handled: true, action: 'session_list' };
+      }
+
+      // Subcommand: delete
+      if (subCmd === 'delete') {
+        const targetId = args[1];
+        if (!targetId) {
+          stream.write(`\n${ansi.yellow('⚠')} Missing session ID. Usage: /session delete <id>\n\n`);
+          return { handled: true, action: 'session_delete', error: true };
+        }
+        if (targetId === sess.id) {
+          stream.write(`\n${ansi.yellow('⚠')} Cannot delete the currently active session.\n\n`);
+          return { handled: true, action: 'session_delete', error: true };
+        }
+        sessionMgr.deleteSession(targetId);
+        stream.write(`\n${ansi.green('✔')} Session "${targetId}" deleted.\n\n`);
+        return { handled: true, action: 'session_delete', sessionId: targetId };
+      }
+
+      // Subcommand: switch (or /resume <id>)
+      if (subCmd === 'switch') {
+        const targetId =
+          (args[0]?.toLowerCase() === 'switch' ? args[1] : args[0]) || args[1];
+        if (!targetId) {
+          stream.write(`\n${ansi.yellow('⚠')} Missing session ID. Usage: /session switch <id>\n\n`);
+          return { handled: true, action: 'switch_session', error: true };
+        }
+        if (targetId === sess.id) {
+          stream.write(`\n${ansi.cyan('ℹ')} Session "${targetId}" is already active.\n\n`);
+          return { handled: true, action: 'switch_session', sessionId: targetId, session: sess };
+        }
+        if (!sessionMgr.hasSession(targetId)) {
+          stream.write(`\n${ansi.yellow('⚠')} Session "${targetId}" not found.\n\n`);
+          return { handled: true, action: 'switch_session', error: true };
+        }
+
+        try {
+          sess.save();
+        } catch (e) {
+          logger.warn(`Failed to auto-save session before switch: ${e.message}`);
+        }
+
+        const newSession = sessionMgr.loadSession(targetId);
+        if (typeof orchestrator.setSession === 'function') {
+          orchestrator.setSession(newSession);
+        } else {
+          orchestrator.session = newSession;
+        }
+
+        return {
+          handled: true,
+          action: 'switch_session',
+          sessionId: newSession.id,
+          session: newSession,
+          previousSessionId: sess.id,
+        };
+      }
+
+      // Subcommand: info or stats
+      if (subCmd === 'info' || subCmd === 'stats') {
+        const msgs = sess.getMessages ? sess.getMessages() : [];
+        const tokenEst = estimateSessionTokens ? estimateSessionTokens(sess) : 0;
+        const usage = getUsage(sess);
+
+        const card = renderStatusCard('Active Session Details', {
+          'Session ID': sess.id || 'N/A',
+          Title: sess.title || '(Untitled Session)',
+          Model: orchestrator.llmClient?.getModel() || sess.model || 'N/A',
+          'Working Dir': sess.workingDir || process.cwd(),
+          'Message Turns': msgs.length,
+          'Est. Tokens': `${tokenEst.toLocaleString()} tokens`,
+          'API Requests': usage.llmRequests,
+          'API Prompt Tokens': usage.promptTokens.toLocaleString(),
+          'API Completion Tokens': usage.completionTokens.toLocaleString(),
+          'API Total Tokens': usage.totalTokens.toLocaleString(),
+          'Created At': sess.createdAt ? new Date(sess.createdAt).toLocaleString() : 'N/A',
+        });
+
+        stream.write(`\n${card}\n\n`);
+        return { handled: true, action: 'session_info' };
+      }
+
+      // No subcommand: interactive picker in TTY or fallback list in non-TTY
+      const isInteractiveTty = Boolean(stream?.isTTY && inputStream?.isTTY);
+      if (isInteractiveTty) {
+        const menuResult = await showSessionMenu({
+          sessionManager: sessionMgr,
+          activeSessionId: sess.id,
+          workingDir: orchestrator.workingDir || process.cwd(),
+          input: inputStream,
+          output: stream,
+        });
+
+        if (menuResult.cancelled) {
+          return { handled: true, action: 'session_menu_cancelled' };
+        }
+
+        if (menuResult.action === 'new') {
+          const newSession = createSession({
+            model: sess.model || orchestrator?.llmClient?.getModel?.() || undefined,
+            provider: sess.provider || orchestrator?.provider || 'gemini',
+            workingDir: sess.workingDir || orchestrator?.workingDir || process.cwd(),
+            sessionsDir: sess.sessionsDir || undefined,
+          });
+          resetUsage(newSession);
+          if (typeof orchestrator.setSession === 'function') {
+            orchestrator.setSession(newSession);
+          } else {
+            orchestrator.session = newSession;
+          }
+          return {
+            handled: true,
+            action: 'new_session',
+            sessionId: newSession.id,
+            previousSessionId: sess.id,
+          };
+        }
+
+        if (menuResult.action === 'switch' && menuResult.sessionId) {
+          if (menuResult.sessionId === sess.id) {
+            stream.write(`\n${ansi.cyan('ℹ')} Already in session ${ansi.bold(sess.id)}.\n\n`);
+            return { handled: true, action: 'switch_session', sessionId: sess.id, session: sess };
+          }
+
+          try {
+            sess.save();
+          } catch (e) {
+            logger.warn(`Failed to auto-save session before switch: ${e.message}`);
+          }
+
+          const newSession = sessionMgr.loadSession(menuResult.sessionId);
+          if (typeof orchestrator.setSession === 'function') {
+            orchestrator.setSession(newSession);
+          } else {
+            orchestrator.session = newSession;
+          }
+
+          return {
+            handled: true,
+            action: 'switch_session',
+            sessionId: newSession.id,
+            session: newSession,
+            previousSessionId: sess.id,
+          };
+        }
+      }
+
+      // Non-TTY fallback: display status card
       const msgs = sess.getMessages ? sess.getMessages() : [];
       const tokenEst = estimateSessionTokens ? estimateSessionTokens(sess) : 0;
       const usage = getUsage(sess);
 
       const card = renderStatusCard('Active Session Details', {
         'Session ID': sess.id || 'N/A',
+        Title: sess.title || '(Untitled Session)',
         Model: orchestrator.llmClient?.getModel() || sess.model || 'N/A',
         'Working Dir': sess.workingDir || process.cwd(),
         'Message Turns': msgs.length,
