@@ -539,7 +539,9 @@ export async function executeSlashCommand(input, context = {}) {
       if (subCmd === 'rename') {
         const newTitle = args.slice(1).join(' ').trim();
         if (!newTitle) {
-          stream.write(`\n${ansi.yellow('⚠')} Missing new title. Usage: /session rename <title>\n\n`);
+          stream.write(
+            `\n${ansi.yellow('⚠')} Missing new title. Usage: /session rename <title>\n\n`,
+          );
           return { handled: true, action: 'session_rename', error: true };
         }
         sess.setTitle(newTitle);
@@ -601,8 +603,7 @@ export async function executeSlashCommand(input, context = {}) {
 
       // Subcommand: switch (or /resume <id>)
       if (subCmd === 'switch') {
-        const targetId =
-          (args[0]?.toLowerCase() === 'switch' ? args[1] : args[0]) || args[1];
+        const targetId = (args[0]?.toLowerCase() === 'switch' ? args[1] : args[0]) || args[1];
         if (!targetId) {
           stream.write(`\n${ansi.yellow('⚠')} Missing session ID. Usage: /session switch <id>\n\n`);
           return { handled: true, action: 'switch_session', error: true };

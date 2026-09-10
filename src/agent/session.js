@@ -80,18 +80,16 @@ export class Session {
     if (typeof textOrParts === 'string') {
       raw = textOrParts;
     } else if (Array.isArray(textOrParts)) {
-      raw = textOrParts
-        .map((p) => (typeof p === 'string' ? p : p?.text || ''))
-        .join(' ');
+      raw = textOrParts.map((p) => (typeof p === 'string' ? p : p?.text || '')).join(' ');
     } else if (textOrParts && typeof textOrParts.text === 'string') {
       raw = textOrParts.text;
     }
 
     const cleaned = raw
       .replace(/```[\s\S]*?```/g, '') // remove code blocks
-      .replace(/`([^`]+)`/g, '$1')     // unwrap inline code
-      .replace(/[\r\n\t]+/g, ' ')      // replace whitespace/newlines with space
-      .replace(/\s+/g, ' ')            // collapse multiple spaces
+      .replace(/`([^`]+)`/g, '$1') // unwrap inline code
+      .replace(/[\r\n\t]+/g, ' ') // replace whitespace/newlines with space
+      .replace(/\s+/g, ' ') // collapse multiple spaces
       .trim();
 
     if (!cleaned) return null;
@@ -102,7 +100,7 @@ export class Session {
     } else {
       const sliced = cleaned.slice(0, maxLen);
       const lastSpace = sliced.lastIndexOf(' ');
-      this.title = (lastSpace > 20 ? sliced.slice(0, lastSpace) : sliced).trim() + '…';
+      this.title = `${(lastSpace > 20 ? sliced.slice(0, lastSpace) : sliced).trim()}…`;
     }
 
     this.touch();

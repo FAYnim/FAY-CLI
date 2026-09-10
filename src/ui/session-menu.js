@@ -9,7 +9,7 @@ import { ansi } from '../utils/ansi.js';
 export function formatRelativeTime(isoString) {
   if (!isoString) return 'unknown';
   const diffMs = Date.now() - new Date(isoString).getTime();
-  if (diffMs < 0 || isNaN(diffMs)) return 'just now';
+  if (diffMs < 0 || Number.isNaN(diffMs)) return 'just now';
   const sec = Math.floor(diffMs / 1000);
   if (sec < 60) return 'just now';
   const min = Math.floor(sec / 60);
@@ -45,7 +45,9 @@ function renderFrame(items, selectedIndex, showAll, workingDir, output) {
   const lines = [header, `Scope: ${scopeLabel} ${ansi.dim(countLabel)}`, ''];
 
   if (items.length === 0) {
-    lines.push(`  ${ansi.dim('(no sessions found in this scope — press \'a\' for all projects or \'n\' for new)')}`);
+    lines.push(
+      `  ${ansi.dim("(no sessions found in this scope — press 'a' for all projects or 'n' for new)")}`,
+    );
   } else {
     items.forEach((it, idx) => {
       const isSelected = idx === selectedIndex;
