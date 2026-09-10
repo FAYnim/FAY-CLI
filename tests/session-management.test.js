@@ -119,3 +119,57 @@ describe('SessionManager: Scoped Listing & Renaming', () => {
   });
 });
 
+import { PassThrough } from 'node:stream';
+import {
+  buildSessionMenuItems,
+  formatRelativeTime,
+  showSessionMenu,
+} from '../src/ui/session-menu.js';
+
+describe('SessionMenu: UI & TTY Logic', () => {
+  test('formatRelativeTime formats durations correctly', () => {
+    const now = Date.now();
+    assert.equal(formatRelativeTime(new Date(now - 30 * 1000).toISOString()), 'just now');
+    assert.equal(formatRelativeTime(new Date(now - 5 * 60 * 1000).toISOString()), '5m ago');
+    assert.equal(formatRelativeTime(new Date(now - 3 * 3600 * 1000).toISOString()), '3h ago');
+    assert.equal(formatRelativeTime(new Date(now - 2 * 86400 * 1000).toISOString()), '2d ago');
+  });
+
+  test('buildSessionMenuItems tags active session and formats metadata', () => {
+    const sessions = [
+      {
+        id: 'sess_1',
+        title: 'Fix Auth',
+        updatedAt: new Date().toISOString(),
+        messageCount: 6,
+        model: 'gemini-2.5-flash',
+        workingDir: '/workspace/app',
+      },
+    ];
+    const items = buildSessionMenuItems(sessions, 'sess_1');
+    assert.equal(items.length, 1);
+    assert.equal(items[0].id, 'sess_1');
+    assert.equal(items[0].isActive, true);
+    assert.equal(items[0].title, 'Fix Auth');
+  });
+
+  test('showSessionMenu falls back gracefully on non-TTY streams', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-sess-menu-'));
+    const tempMgr = new SessionManager({ sessionsDir: tmp });
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const result = await showSessionMenu({
+      sessionManager: tempMgr,
+      activeSessionId: 'sess_none',
+      input,
+      output,
+    });
+    assert.equal(result.cancelled, true);
+    assert.equal(result.isNonTty, true);
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    } catch (_) {}
+  });
+});
+
+
