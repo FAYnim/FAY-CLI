@@ -51,10 +51,62 @@ export class Session {
     this.metadata = data.metadata || {};
     this.sessionsDir = data.sessionsDir || null;
 
+    this.title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : null;
     this.messages = [];
     if (Array.isArray(data.messages)) {
       this.messages = data.messages.map(normalizeContent);
     }
+  }
+
+  /**
+   * Sets or updates session title
+   * @param {string} title
+   * @returns {string|null}
+   */
+  setTitle(title) {
+    this.title = typeof title === 'string' && title.trim() ? title.trim() : null;
+    this.touch();
+    return this.title;
+  }
+
+  /**
+   * Automatically sets a title from prompt text if not already titled
+   * @param {string|Array|object} textOrParts
+   * @returns {string|null}
+   */
+  ensureTitle(textOrParts) {
+    if (this.title) return this.title;
+    let raw = '';
+    if (typeof textOrParts === 'string') {
+      raw = textOrParts;
+    } else if (Array.isArray(textOrParts)) {
+      raw = textOrParts
+        .map((p) => (typeof p === 'string' ? p : p?.text || ''))
+        .join(' ');
+    } else if (textOrParts && typeof textOrParts.text === 'string') {
+      raw = textOrParts.text;
+    }
+
+    const cleaned = raw
+      .replace(/```[\s\S]*?```/g, '') // remove code blocks
+      .replace(/`([^`]+)`/g, '$1')     // unwrap inline code
+      .replace(/[\r\n\t]+/g, ' ')      // replace whitespace/newlines with space
+      .replace(/\s+/g, ' ')            // collapse multiple spaces
+      .trim();
+
+    if (!cleaned) return null;
+
+    const maxLen = 45;
+    if (cleaned.length <= maxLen) {
+      this.title = cleaned;
+    } else {
+      const sliced = cleaned.slice(0, maxLen);
+      const lastSpace = sliced.lastIndexOf(' ');
+      this.title = (lastSpace > 20 ? sliced.slice(0, lastSpace) : sliced).trim() + '…';
+    }
+
+    this.touch();
+    return this.title;
   }
 
   /**
@@ -82,6 +134,7 @@ export class Session {
    * @returns {object}
    */
   addUserMessage(textOrParts) {
+    this.ensureTitle(textOrParts);
     const msg = createUserMessage(textOrParts);
     this.messages.push(msg);
     this.touch();
@@ -169,6 +222,7 @@ export class Session {
   toJSON() {
     return {
       id: this.id,
+      title: this.title,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       model: this.model,
