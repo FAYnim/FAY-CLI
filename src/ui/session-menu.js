@@ -35,16 +35,42 @@ export function buildSessionMenuItems(sessions, activeSessionId) {
   }));
 }
 
-function renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount = items.length) {
+/**
+ * Adjusts scrolling viewport offset so selectedIndex stays in visible window of maxVisible items.
+ *
+ * @param {number} selectedIndex
+ * @param {number} currentScrollOffset
+ * @param {number} totalItems
+ * @param {number} [maxVisible=5]
+ * @returns {number}
+ */
+export function adjustScrollOffset(selectedIndex, currentScrollOffset, totalItems, maxVisible = 5) {
+  if (totalItems <= maxVisible) return 0;
+  let offset = currentScrollOffset;
+  if (selectedIndex < offset) {
+    offset = selectedIndex;
+  } else if (selectedIndex >= offset + maxVisible) {
+    offset = selectedIndex - maxVisible + 1;
+  }
+  return Math.max(0, Math.min(offset, totalItems - maxVisible));
+}
+
+function renderFrame(
+  items,
+  selectedIndex,
+  showAll,
+  workingDir,
+  output,
+  maxVisible = 5,
+  scrollOffset = 0,
+) {
   const scopeLabel = showAll
     ? `${ansi.yellow('All Projects')}`
     : `${ansi.cyan('Current Project')} ${ansi.dim(`(${workingDir || process.cwd()})`)}`;
   const countLabel =
-    totalCount > items.length
-      ? `[showing ${items.length} of ${totalCount} latest sessions]`
-      : `[${items.length} session${items.length === 1 ? '' : 's'}]`;
+    items.length > 0 ? `[${selectedIndex + 1}/${items.length} sessions]` : '[0 sessions]';
 
-  const header = `${ansi.bold(ansi.cyan('⚡ Select a session'))}  ${ansi.dim('(↑/↓ navigate • Enter switch • a toggle all • r rename • d delete • n new • Esc cancel)')}`;
+  const header = `${ansi.bold(ansi.cyan('⚡ Select a session'))}  ${ansi.dim('(↑/↓ scroll • Enter switch • a toggle all • r rename • d delete • n new • Esc cancel)')}`;
   const lines = [header, `Scope: ${scopeLabel} ${ansi.dim(countLabel)}`, ''];
 
   if (items.length === 0) {
@@ -52,8 +78,17 @@ function renderFrame(items, selectedIndex, showAll, workingDir, output, totalCou
       `  ${ansi.dim("(no sessions found in this scope — press 'a' for all projects or 'n' for new)")}`,
     );
   } else {
-    items.forEach((it, idx) => {
-      const isSelected = idx === selectedIndex;
+    // Show top scroll indicator if scrolled down
+    if (scrollOffset > 0) {
+      lines.push(
+        ansi.dim(`    ▲  (${scrollOffset} more session${scrollOffset > 1 ? 's' : ''} above)`),
+      );
+    }
+
+    const visibleItems = items.slice(scrollOffset, scrollOffset + maxVisible);
+    visibleItems.forEach((it, localIdx) => {
+      const globalIdx = scrollOffset + localIdx;
+      const isSelected = globalIdx === selectedIndex;
       const cursor = isSelected ? ansi.green('▸') : ' ';
       const marker = it.isActive ? ansi.green('●') : ansi.dim('○');
       const title = isSelected ? ansi.bold(ansi.whiteBright(it.title)) : ansi.white(it.title);
@@ -63,6 +98,14 @@ function renderFrame(items, selectedIndex, showAll, workingDir, output, totalCou
       const meta = `${it.id} · ${it.messageCount} msgs · ${it.relativeTime} · ${it.model}`;
       lines.push(`      ${ansi.dim(meta)}`);
     });
+
+    // Show bottom scroll indicator if more items below
+    const remainingBelow = items.length - (scrollOffset + visibleItems.length);
+    if (remainingBelow > 0) {
+      lines.push(
+        ansi.dim(`    ▼  (${remainingBelow} more session${remainingBelow > 1 ? 's' : ''} below)`),
+      );
+    }
   }
 
   lines.push('');
@@ -76,7 +119,7 @@ function renderFrame(items, selectedIndex, showAll, workingDir, output, totalCou
  * @param {import('../agent/session.js').SessionManager} options.sessionManager
  * @param {string} [options.activeSessionId]
  * @param {string} [options.workingDir]
- * @param {number} [options.limit=5]
+ * @param {number} [options.maxVisible=5] - Maximum sessions visible on screen at once
  * @param {NodeJS.ReadableStream} [options.input]
  * @param {NodeJS.WritableStream} [options.output]
  * @returns {Promise<{ cancelled: boolean, action?: 'switch'|'new', sessionId?: string, isNonTty?: boolean }>}
@@ -85,7 +128,7 @@ export async function showSessionMenu({
   sessionManager,
   activeSessionId = null,
   workingDir = process.cwd(),
-  limit = 5,
+  maxVisible = 5,
   input = process.stdin,
   output = process.stdout,
 }) {
@@ -98,17 +141,15 @@ export async function showSessionMenu({
     let showAll = false;
     const fetchItems = () => {
       const allFound = sessionManager.listSessions({ workingDir, all: showAll });
-      const totalCount = allFound.length;
-      const sliced = typeof limit === 'number' && limit > 0 ? allFound.slice(0, limit) : allFound;
-      const items = buildSessionMenuItems(sliced, activeSessionId);
-      return { items, totalCount };
+      return buildSessionMenuItems(allFound, activeSessionId);
     };
 
-    let { items, totalCount } = fetchItems();
+    let items = fetchItems();
 
     let selectedIndex = 0;
     const activeIdx = items.findIndex((it) => it.isActive);
     if (activeIdx >= 0) selectedIndex = activeIdx;
+    let scrollOffset = adjustScrollOffset(selectedIndex, 0, items.length, maxVisible);
 
     if (typeof input.resume === 'function') input.resume();
     if (typeof input.setRawMode === 'function') {
@@ -120,7 +161,7 @@ export async function showSessionMenu({
 
     let isPrompting = false;
 
-    renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+    renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
 
     const cleanup = (result) => {
       try {
@@ -156,7 +197,8 @@ export async function showSessionMenu({
       if (key.name === 'up' || key.name === 'k') {
         if (items.length > 0) {
           selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+          scrollOffset = adjustScrollOffset(selectedIndex, scrollOffset, items.length, maxVisible);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
         }
         return;
       }
@@ -164,7 +206,8 @@ export async function showSessionMenu({
       if (key.name === 'down' || key.name === 'j') {
         if (items.length > 0) {
           selectedIndex = (selectedIndex + 1) % items.length;
-          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+          scrollOffset = adjustScrollOffset(selectedIndex, scrollOffset, items.length, maxVisible);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
         }
         return;
       }
@@ -172,11 +215,10 @@ export async function showSessionMenu({
       // 'a' -> toggle all / project scoped
       if (key.name === 'a') {
         showAll = !showAll;
-        const res = fetchItems();
-        items = res.items;
-        totalCount = res.totalCount;
+        items = fetchItems();
         selectedIndex = Math.min(selectedIndex, Math.max(0, items.length - 1));
-        renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+        scrollOffset = adjustScrollOffset(selectedIndex, scrollOffset, items.length, maxVisible);
+        renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
         return;
       }
 
@@ -192,7 +234,16 @@ export async function showSessionMenu({
         if (target.isActive) {
           output.write(`\n${ansi.yellow('⚠ Cannot delete currently active session.')}\n`);
           setTimeout(
-            () => renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount),
+            () =>
+              renderFrame(
+                items,
+                selectedIndex,
+                showAll,
+                workingDir,
+                output,
+                maxVisible,
+                scrollOffset,
+              ),
             1500,
           );
           return;
@@ -207,12 +258,16 @@ export async function showSessionMenu({
           isPrompting = false;
           if (ans.trim().toLowerCase() === 'y') {
             sessionManager.deleteSession(target.id);
-            const res = fetchItems();
-            items = res.items;
-            totalCount = res.totalCount;
+            items = fetchItems();
             selectedIndex = Math.min(selectedIndex, Math.max(0, items.length - 1));
+            scrollOffset = adjustScrollOffset(
+              selectedIndex,
+              scrollOffset,
+              items.length,
+              maxVisible,
+            );
           }
-          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
         });
         return;
       }
@@ -230,11 +285,15 @@ export async function showSessionMenu({
           const newTitle = ans.trim();
           if (newTitle) {
             sessionManager.renameSession(target.id, newTitle);
-            const res = fetchItems();
-            items = res.items;
-            totalCount = res.totalCount;
+            items = fetchItems();
+            scrollOffset = adjustScrollOffset(
+              selectedIndex,
+              scrollOffset,
+              items.length,
+              maxVisible,
+            );
           }
-          renderFrame(items, selectedIndex, showAll, workingDir, output, totalCount);
+          renderFrame(items, selectedIndex, showAll, workingDir, output, maxVisible, scrollOffset);
         });
         return;
       }

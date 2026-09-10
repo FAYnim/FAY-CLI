@@ -125,6 +125,7 @@ describe('SessionManager: Scoped Listing & Renaming', () => {
 
 import { PassThrough } from 'node:stream';
 import {
+  adjustScrollOffset,
   buildSessionMenuItems,
   formatRelativeTime,
   showSessionMenu,
@@ -155,6 +156,32 @@ describe('SessionMenu: UI & TTY Logic', () => {
     assert.equal(items[0].id, 'sess_1');
     assert.equal(items[0].isActive, true);
     assert.equal(items[0].title, 'Fix Auth');
+  });
+
+  test('adjustScrollOffset manages sliding window for 5-item display', () => {
+    // totalItems <= maxVisible: offset is always 0
+    assert.equal(adjustScrollOffset(0, 0, 3, 5), 0);
+    assert.equal(adjustScrollOffset(2, 0, 3, 5), 0);
+
+    // 10 items, maxVisible 5: cursor within initial visible window (0..4)
+    assert.equal(adjustScrollOffset(0, 0, 10, 5), 0);
+    assert.equal(adjustScrollOffset(4, 0, 10, 5), 0);
+
+    // Cursor moves down to index 5: scrolls window by 1 (offset = 1)
+    assert.equal(adjustScrollOffset(5, 0, 10, 5), 1);
+    // Cursor moves down to index 7: offset = 3 (visible items 3..7)
+    assert.equal(adjustScrollOffset(7, 1, 10, 5), 3);
+    // Cursor at end (index 9): offset = 5 (visible items 5..9)
+    assert.equal(adjustScrollOffset(9, 3, 10, 5), 5);
+
+    // Cursor moves backward/up from offset 5 to index 3: offset becomes 3
+    assert.equal(adjustScrollOffset(3, 5, 10, 5), 3);
+
+    // Wrap-around from top (0) to bottom (9)
+    assert.equal(adjustScrollOffset(9, 0, 10, 5), 5);
+
+    // Wrap-around from bottom (9) to top (0)
+    assert.equal(adjustScrollOffset(0, 5, 10, 5), 0);
   });
 
   test('showSessionMenu falls back gracefully on non-TTY streams', async () => {
