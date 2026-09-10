@@ -14,6 +14,7 @@ import { isPipedInput, mergePipedPrompt, readPipedStdin } from '../src/cli/pipin
 import { startRepl } from '../src/cli/repl.js';
 import { runSingleShot } from '../src/cli/single-shot.js';
 import { ConfigManager } from '../src/config/manager.js';
+import { showSessionMenu } from '../src/ui/session-menu.js';
 import { ansi } from '../src/utils/ansi.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -311,11 +312,30 @@ ${ansi.yellow('Or export as environment variable:')}
 
   // Handle Resume Session
   let activeSession = null;
-  const resumeId = parsed.command === 'resume' ? parsed.subcommand : parsed.flags.session;
+  let resumeId = parsed.command === 'resume' ? parsed.subcommand : parsed.flags.session;
+
+  if (parsed.command === 'resume' && !resumeId) {
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      const menuResult = await showSessionMenu({
+        sessionManager: defaultSessionManager,
+        workingDir: process.cwd(),
+        input: process.stdin,
+        output: process.stdout,
+      });
+      if (menuResult.cancelled) {
+        process.exit(0);
+      }
+      if (menuResult.action === 'switch' && menuResult.sessionId) {
+        resumeId = menuResult.sessionId;
+      }
+    }
+  }
+
   if (resumeId) {
     if (defaultSessionManager.hasSession(resumeId)) {
       activeSession = defaultSessionManager.loadSession(resumeId);
-      logger.info(`Resumed existing session: ${ansi.yellow(resumeId)}`);
+      const titleDisplay = activeSession.title ? ` ("${activeSession.title}")` : '';
+      logger.info(`Resumed existing session: ${ansi.yellow(resumeId)}${titleDisplay}`);
     } else {
       logger.error(`Session "${resumeId}" not found in storage.`);
       process.exit(1);

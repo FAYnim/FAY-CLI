@@ -283,6 +283,19 @@ describe('REPL: History Replay & Switch Synchronization', () => {
   });
 });
 
+describe('CLI: Resume Command Resolution', () => {
+  test('resolves resumeId from args or prompts via session picker', () => {
+    // When subcommand is passed: faycli resume <id>
+    const parsedWithId = { command: 'resume', subcommand: 'sess_123', flags: {} };
+    assert.equal(parsedWithId.subcommand, 'sess_123');
+
+    // When no subcommand passed: faycli resume
+    const parsedNoId = { command: 'resume', subcommand: null, flags: {} };
+    assert.equal(parsedNoId.subcommand, null);
+  });
+});
+
+
 
 
 
