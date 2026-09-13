@@ -105,6 +105,15 @@ export async function startRepl(options = {}) {
 
   output.write(`\n${banner}\n\n`);
 
+  // Display loaded instruction files notice if present (security mitigant: shows which files loaded)
+  if (typeof orchestrator.getInstructionFiles === 'function') {
+    const instructionFiles = orchestrator.getInstructionFiles();
+    if (instructionFiles.length > 0) {
+      const fileList = instructionFiles.map((f) => ansi.cyan(f)).join(', ');
+      output.write(`${ansi.cyan('ℹ')} ${ansi.dim('Loaded instructions:')} ${fileList}\n\n`);
+    }
+  }
+
   let isBusy = false;
   let activeAbortController = null;
   let lastSigintTime = 0;
