@@ -55,38 +55,100 @@ Respond ONLY with a JSON object in this exact format:
 }
 
 /**
- * Parses a reflection response string into { finish, reason }
- * Handles JSON wrapped in markdown fences or surrounding text.
+ * Helper to normalize raw parsed object into { finish: boolean, reason: string }
+ * @param {any} parsed
+ * @returns {{finish: boolean, reason: string}|null}
  */
-function parseReflectionResponse(text) {
-  if (!text || typeof text !== 'string') return null;
-
-  // Strip markdown code fences if present
-  const cleaned = text
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/, '')
-    .trim();
-
-  // Try direct parse first
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (typeof parsed.finish === 'boolean' && typeof parsed.reason === 'string') {
-      return parsed;
-    }
-  } catch {}
-
-  // Fall back to finding JSON block inside text
-  const jsonMatch = cleaned.match(/\{[\s\S]*?"finish"[\s\S]*?\}/);
-  if (!jsonMatch) return null;
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (typeof parsed.finish === 'boolean' && typeof parsed.reason === 'string') {
-      return parsed;
-    }
-  } catch {
+function normalizeReflectionObject(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
   }
+
+  // Resolve finish status
+  let finish = undefined;
+  const rawFinish =
+    parsed.finish ??
+    parsed.completed ??
+    parsed.done ??
+    parsed.is_finished ??
+    parsed.isComplete;
+
+  if (typeof rawFinish === 'boolean') {
+    finish = rawFinish;
+  } else if (typeof rawFinish === 'string') {
+    const lower = rawFinish.trim().toLowerCase();
+    if (lower === 'true' || lower === 'yes' || lower === '1') finish = true;
+    else if (lower === 'false' || lower === 'no' || lower === '0') finish = false;
+  }
+
+  if (typeof finish !== 'boolean') {
+    return null;
+  }
+
+  // Resolve reason
+  const rawReason =
+    parsed.reason ??
+    parsed.explanation ??
+    parsed.message ??
+    parsed.details ??
+    parsed.summary;
+
+  let reason = '';
+  if (typeof rawReason === 'string') {
+    reason = rawReason.trim();
+  } else if (rawReason != null) {
+    reason = String(rawReason).trim();
+  }
+
+  if (!reason) {
+    reason = finish ? 'Task goal achieved' : 'Task in progress';
+  }
+
+  return { finish, reason };
+}
+
+/**
+ * Parses a reflection response string into { finish, reason }
+ * Handles markdown fences, preamble/postamble text, nested braces, and field aliases.
+ *
+ * @param {string} text
+ * @returns {{finish: boolean, reason: string}|null}
+ */
+export function parseReflectionResponse(text) {
+  if (!text || typeof text !== 'string') return null;
+
+  const trimmed = text.trim();
+
+  // 1. Direct JSON parse (if already clean JSON)
+  try {
+    const parsed = JSON.parse(trimmed);
+    const normalized = normalizeReflectionObject(parsed);
+    if (normalized) return normalized;
+  } catch {}
+
+  // 2. Extract content from markdown code fence block if present: ```json ... ```
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch && fenceMatch[1]) {
+    try {
+      const parsed = JSON.parse(fenceMatch[1].trim());
+      const normalized = normalizeReflectionObject(parsed);
+      if (normalized) return normalized;
+    } catch {}
+  }
+
+  // 3. Robust substring extraction: between outermost curly braces
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(candidate);
+      const normalized = normalizeReflectionObject(parsed);
+      if (normalized) return normalized;
+    } catch {}
+  }
+
+  return null;
 }
 
 /**

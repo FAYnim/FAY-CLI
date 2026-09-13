@@ -161,6 +161,48 @@ describe('Step 4b: Reflection Checker', () => {
         /"finish":\s*(true|false)/i
       );
     });
+
+    test('should parse JSON with conversational preamble and markdown fence', async () => {
+      const mockClient = {
+        generate: async () => ({
+          text: 'Here is the progress evaluation:\n```json\n{\n  "finish": false,\n  "reason": "web_fetch finished but result not analyzed"\n}\n```\nHope that helps!',
+        }),
+      };
+      const checker = new ReflectionChecker(mockClient, { interval: 1 });
+      checker.record(1, [{ name: 'web_fetch', args: { url: 'https://example.com' } }]);
+
+      const result = await checker.check('fetch example.com', 1);
+      assert.equal(result.finish, false);
+      assert.equal(result.reason, 'web_fetch finished but result not analyzed');
+    });
+
+    test('should parse JSON containing curly braces inside reason string', async () => {
+      const mockClient = {
+        generate: async () => ({
+          text: '{"finish": false, "reason": "web_fetch returned { status: 200, data: [1, 2] } needing summary"}',
+        }),
+      };
+      const checker = new ReflectionChecker(mockClient, { interval: 1 });
+      checker.record(1, [{ name: 'web_fetch', args: { url: 'https://example.com' } }]);
+
+      const result = await checker.check('fetch and summarize', 1);
+      assert.equal(result.finish, false);
+      assert.ok(result.reason.includes('{ status: 200'));
+    });
+
+    test('should normalize string boolean and field aliases (completed / explanation)', async () => {
+      const mockClient = {
+        generate: async () => ({
+          text: '{\n  "completed": "true",\n  "explanation": "All objectives met successfully"\n}',
+        }),
+      };
+      const checker = new ReflectionChecker(mockClient, { interval: 1 });
+      checker.record(1, [{ name: 'write_file', args: { filePath: 'res.txt' } }]);
+
+      const result = await checker.check('generate res.txt', 1);
+      assert.equal(result.finish, true);
+      assert.equal(result.reason, 'All objectives met successfully');
+    });
   });
 
   // ─── Orchestrator integration tests ─────────────────────────────────────────
