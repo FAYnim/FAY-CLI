@@ -181,3 +181,66 @@ describe('Project Instructions: AgentOrchestrator Integration', () => {
     assert.equal(orchestrator.getEffectiveSystemInstruction(), 'Hardcoded override system prompt');
   });
 });
+
+import { PassThrough } from 'node:stream';
+import { executeSlashCommand, SLASH_COMMANDS_HELP } from '../src/cli/slash-commands.js';
+
+describe('Project Instructions: REPL Banner Integration', () => {
+  test('formatting of loaded instructions notice uses cyan indicator and file list', () => {
+    const files = ['/path/to/project/AGENTS.md', '/path/to/cwd/AGENTS.md'];
+    const notice = `\x1B[36mℹ\x1B[39m \x1B[2mLoaded instructions:\x1B[22m ${files.join(', ')}\n`;
+    assert.ok(notice.includes('Loaded instructions:'));
+    assert.ok(notice.includes('AGENTS.md'));
+  });
+});
+
+describe('Project Instructions: /instructions Slash Command', () => {
+  test('SLASH_COMMANDS_HELP includes /instructions entry', () => {
+    const found = SLASH_COMMANDS_HELP.find((c) => c.cmd.startsWith('/instructions'));
+    assert.ok(found, '/instructions should be documented in help menu');
+  });
+
+  test('/instructions reports no files when empty', async () => {
+    const dummyOrch = {
+      getInstructionFiles: () => [],
+      getCustomInstructions: () => null,
+    };
+    const out = new PassThrough();
+    let data = '';
+    out.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+
+    const res = await executeSlashCommand('/instructions', {
+      orchestrator: dummyOrch,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'instructions');
+    assert.ok(data.includes('No instruction files loaded.'));
+  });
+
+  test('/instructions displays loaded file paths and rendered instruction content', async () => {
+    const dummyOrch = {
+      getInstructionFiles: () => ['/workspace/AGENTS.md'],
+      getCustomInstructions: () =>
+        '## From /workspace/AGENTS.md\n\n- Always run tests before commit',
+    };
+    const out = new PassThrough();
+    let data = '';
+    out.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+
+    const res = await executeSlashCommand('/instructions', {
+      orchestrator: dummyOrch,
+      stream: out,
+    });
+
+    assert.equal(res.handled, true);
+    assert.equal(res.action, 'instructions');
+    assert.ok(data.includes('/workspace/AGENTS.md'));
+    assert.ok(data.includes('Always run tests before commit'));
+  });
+});
