@@ -10,7 +10,8 @@ import { createLlmClient } from '../llm/registry.js';
 import { SecurityGuard } from '../security/guard.js';
 import { dispatchToolCall, getToolDeclarations, READ_ONLY_TOOLS } from '../tools/registry.js';
 import { logger as defaultLogger } from '../utils/logger.js';
-import { findProjectRoot } from '../utils/project.js';
+import { configManager } from '../config/manager.js';
+import { findProjectRoot, loadInstructions } from '../utils/project.js';
 import { compactSession } from './compactor.js';
 import { pruneMessages } from './pruner.js';
 import { ReflectionChecker } from './reflection.js';
@@ -98,6 +99,19 @@ export class AgentOrchestrator {
     // Base custom system prompt if explicitly supplied
     this.customSystemInstruction = options.systemInstruction || null;
 
+    // Project instructions (AGENTS.md) — loaded unless systemInstruction override is present
+    this.instructionFiles = [];
+    this.customInstructions = null;
+    if (!this.customSystemInstruction) {
+      const cfg = options.configManager || configManager;
+      const instructionsSetting = cfg?.get ? cfg.get('instructionsFile') : undefined;
+      const { text, files } = loadInstructions(this.workingDir, {
+        instructionsFile: instructionsSetting,
+      });
+      this.customInstructions = text || null;
+      this.instructionFiles = files || [];
+    }
+
     // Tools
     this.tools = options.tools || getToolDeclarations();
 
@@ -117,7 +131,24 @@ export class AgentOrchestrator {
       workingDir: this.workingDir,
       mode: this.mode,
       activePlanPath: this.activePlanPath,
+      customInstructions: this.customInstructions,
     });
+  }
+
+  /**
+   * Returns paths of instruction files loaded into the system prompt
+   * @returns {string[]}
+   */
+  getInstructionFiles() {
+    return this.instructionFiles;
+  }
+
+  /**
+   * Returns the raw custom instructions string loaded from instruction files
+   * @returns {string|null}
+   */
+  getCustomInstructions() {
+    return this.customInstructions;
   }
 
   /**

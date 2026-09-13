@@ -97,4 +97,5 @@ export const DEFAULT_CONFIG = {
   autoConfirm: false,
   verbose: false,
   locale: 'en',
+  instructionsFile: 'AGENTS.md',
 };

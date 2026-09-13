@@ -10,6 +10,7 @@ import { estimateSessionTokens } from '../agent/pruner.js';
 import { createSession, defaultSessionManager } from '../agent/session.js';
 import { getUsage, resetUsage } from '../agent/usage.js';
 import { renderBox, renderStatusCard } from '../ui/box.js';
+import { renderMarkdown } from '../ui/markdown.js';
 import { showModelMenuFromConfig } from '../ui/model-menu.js';
 import { showSessionMenu } from '../ui/session-menu.js';
 import { ansi } from '../utils/ansi.js';
@@ -54,6 +55,7 @@ export const SLASH_COMMANDS_HELP = [
   },
   { cmd: '/thoughts', desc: 'Toggle display of LLM reasoning/thought steps (hidden by default)' },
   { cmd: '/clear', desc: 'Clear the terminal screen' },
+  { cmd: '/instructions', desc: 'Show project instruction files loaded into the system prompt' },
   { cmd: '/config', desc: 'Display active CLI configuration settings' },
   { cmd: '/exit, /quit', desc: 'Exit interactive REPL session' },
 ];
@@ -868,6 +870,40 @@ export async function executeSlashCommand(input, context = {}) {
     case 'quit': {
       stream.write(`\n${ansi.cyan('👋 Goodbye! Session saved.')}\n\n`);
       return { handled: true, action: 'exit' };
+    }
+
+    case 'instructions': {
+      if (!orchestrator) {
+        return { handled: true, error: true, message: 'No active orchestrator' };
+      }
+
+      const instructionFiles =
+        typeof orchestrator.getInstructionFiles === 'function'
+          ? orchestrator.getInstructionFiles()
+          : [];
+      const instructionsText =
+        typeof orchestrator.getCustomInstructions === 'function'
+          ? orchestrator.getCustomInstructions()
+          : null;
+
+      if (!instructionFiles.length || !instructionsText) {
+        stream.write(`\n${ansi.dim('No instruction files loaded.')}\n\n`);
+        return { handled: true, action: 'instructions' };
+      }
+
+      stream.write(`\n${ansi.bold(ansi.cyan('Project Instructions:'))}\n`);
+      for (const f of instructionFiles) {
+        let sizeInfo = '';
+        try {
+          const stats = fs.statSync(f);
+          sizeInfo = ` ${ansi.dim(`(${stats.size} bytes)`)}`;
+        } catch (_) {}
+        stream.write(`  ${ansi.green('•')} ${ansi.white(f)}${sizeInfo}\n`);
+      }
+      stream.write('\n');
+      stream.write(renderMarkdown(instructionsText));
+      stream.write('\n\n');
+      return { handled: true, action: 'instructions' };
     }
 
     default: {
