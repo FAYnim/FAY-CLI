@@ -18,7 +18,7 @@
 
 ---
 
-## 1. Auto-load Project Instructions — Prioritas 1 · Mudah
+## 1. Auto-load Project Instructions — Prioritas 1 · Mudah (done)
 
 **Status saat ini.** `buildSystemPrompt()` (`src/agent/system-prompt.js:266`) sudah punya
 hook `options.customInstructions` yang meng-inject blok `### CUSTOM USER INSTRUCTIONS:`
