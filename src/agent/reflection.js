@@ -12,7 +12,7 @@ const DEFAULT_REFLECTION_INTERVAL = 3;
 /**
  * System prompt for reflection evaluator — instructs the LLM to output JSON only
  */
-const _REFLECTION_SYSTEM_INSTRUCTION = `You are an AI agent progress evaluator. Given a task and a list of recent tool calls, decide whether the task has been completed.
+export const REFLECTION_SYSTEM_INSTRUCTION = `You are an AI agent progress evaluator. Given a task and a list of recent tool calls, decide whether the task has been completed.
 
 Respond with ONLY a valid JSON object, nothing else:
 {
@@ -33,7 +33,7 @@ Rules:
 /**
  * Builds the reflection user prompt from original task and recent tool calls
  */
-function buildReflectionPrompt(originalPrompt, iterationCount, recentToolCalls) {
+export function buildReflectionPrompt(originalPrompt, iterationCount, recentToolCalls) {
   const callsDetail =
     recentToolCalls.length > 0
       ? recentToolCalls.map((c) => `  - ${c.name}(${JSON.stringify(c.args)})`).join('\n')
@@ -46,7 +46,12 @@ PROGRESS:
 - Recent tool calls made:
 ${callsDetail}
 
-EVALUATE: Has the task been completed? Respond with JSON only.`;
+EVALUATE: Has the task been completed?
+Respond ONLY with a JSON object in this exact format:
+{
+  "finish": true or false,
+  "reason": "Brief explanation"
+}`;
 }
 
 /**
@@ -146,6 +151,8 @@ export class ReflectionChecker {
     try {
       const result = await this.llmClient.generate({
         contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        systemInstruction: REFLECTION_SYSTEM_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json' },
         timeoutMs: 15000,
       });
 

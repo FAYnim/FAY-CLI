@@ -130,6 +130,37 @@ describe('Step 4b: Reflection Checker', () => {
       assert.ok(checker instanceof ReflectionChecker);
       assert.equal(checker.interval, 2);
     });
+
+    test('should pass systemInstruction and generationConfig to llmClient.generate', async () => {
+      let capturedOptions = null;
+      const mockClient = {
+        generate: async (opts) => {
+          capturedOptions = opts;
+          return { text: '{ "finish": true, "reason": "task complete" }' };
+        },
+      };
+      const checker = new ReflectionChecker(mockClient, { interval: 1 });
+      checker.record(1, [{ name: 'read_file', args: { filePath: 'foo.txt' } }]);
+
+      await checker.check('analyze foo.txt', 1);
+
+      assert.ok(capturedOptions, 'generate should have been called');
+      assert.ok(capturedOptions.systemInstruction, 'systemInstruction must be passed');
+      assert.match(
+        typeof capturedOptions.systemInstruction === 'string'
+          ? capturedOptions.systemInstruction
+          : capturedOptions.systemInstruction?.parts?.[0]?.text || '',
+        /AI agent progress evaluator/
+      );
+      assert.equal(
+        capturedOptions.generationConfig?.responseMimeType,
+        'application/json'
+      );
+      assert.match(
+        capturedOptions.contents[0].parts[0].text,
+        /"finish":\s*(true|false)/i
+      );
+    });
   });
 
   // ─── Orchestrator integration tests ─────────────────────────────────────────
