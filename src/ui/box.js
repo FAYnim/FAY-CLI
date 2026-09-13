@@ -170,6 +170,7 @@ export function renderStatusCard(title, data = {}, options = {}) {
  * @param {number} [options.contextBudget=0] - budget force-stop limit (85%)
  * @param {number} [options.iterations=0] - iterations used in the last turn
  * @param {number} [options.maxIterations=0] - ReAct loop cap
+ * @param {number} [options.durationMs=0] - duration in ms of the last turn
  * @returns {string} Single dim status line
  */
 export function renderStatusLine(options = {}) {
@@ -178,6 +179,7 @@ export function renderStatusLine(options = {}) {
   const contextBudget = options.contextBudget || 0;
   const iterations = options.iterations || 0;
   const maxIterations = options.maxIterations || 0;
+  const durationMs = options.durationMs || 0;
 
   const estimated = !usage.llmRequests;
   const tok = `${estimated ? '~' : ''}${formatCompactTokens(usage.totalTokens || 0)} tok`;
@@ -194,6 +196,14 @@ export function renderStatusLine(options = {}) {
   const segments = [tok, ctxSegment];
   if (iterations > 0 && maxIterations > 0) {
     segments.push(`loop ${iterations}/${Number.isFinite(maxIterations) ? maxIterations : '\u221E'}`);
+  }
+  if (durationMs > 0) {
+    const totalSec = durationMs / 1000;
+    const durStr =
+      totalSec < 60
+        ? `${totalSec.toFixed(1)}s`
+        : `${Math.floor(totalSec / 60)}m ${Math.floor(totalSec % 60)}s`;
+    segments.push(durStr);
   }
 
   return ansi.dim(`\u2500 ${segments.join(' \u2502 ')} \u2500`);

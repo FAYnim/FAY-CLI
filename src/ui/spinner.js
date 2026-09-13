@@ -24,23 +24,72 @@ export class Spinner {
     this.stream = options.stream || process.stdout;
     this.enabled =
       options.enabled !== undefined ? Boolean(options.enabled) : Boolean(this.stream?.isTTY);
+    this.showTimer = options.showTimer !== false;
+    this.showDurationOnFinish = Boolean(options.showDurationOnFinish);
 
     this.frameIndex = 0;
     this.timer = null;
     this.spinning = false;
+    this.startTime = null;
+    this.totalStartTime = null;
+    this.lastElapsed = 0;
+  }
+
+  /**
+   * Formats duration in ms to human-readable string (e.g. '0.2s', '5.4s', '1m 23s')
+   * @param {number} ms
+   * @returns {string}
+   */
+  formatDuration(ms) {
+    if (!ms || ms <= 0) return '0.0s';
+    const totalSec = ms / 1000;
+    if (totalSec < 60) {
+      return `${totalSec.toFixed(1)}s`;
+    }
+    const mins = Math.floor(totalSec / 60);
+    const secs = Math.floor(totalSec % 60);
+    return `${mins}m ${secs}s`;
+  }
+
+  /**
+   * Returns elapsed time in milliseconds for the current stage
+   * @returns {number}
+   */
+  getElapsed() {
+    return this.startTime ? Date.now() - this.startTime : 0;
+  }
+
+  /**
+   * Returns total elapsed time in milliseconds since spinner was first started
+   * @returns {number}
+   */
+  getTotalElapsed() {
+    return this.totalStartTime ? Date.now() - this.totalStartTime : 0;
   }
 
   /**
    * Starts or resumes spinner animation
    * @param {string} [text]
+   * @param {object} [options={}]
+   * @param {boolean} [options.resetTimer=true] - Reset stage stopwatch on new text
    * @returns {Spinner}
    */
-  start(text) {
+  start(text, options = {}) {
+    const isNewText = text !== undefined && text !== this.text;
     if (text !== undefined) {
       this.text = text;
     }
 
+    const now = Date.now();
+    if (!this.spinning) {
+      this.totalStartTime = now;
+      this.startTime = now;
+    } else if (isNewText && options.resetTimer !== false) {
+      this.startTime = now;
+    }
+
     if (this.spinning) {
+      this.render();
       return this;
     }
 
@@ -75,16 +124,20 @@ export class Spinner {
   }
 
   /**
-   * Renders the current frame to the terminal
+   * Renders the current frame to the terminal with optional live stopwatch
    */
   render() {
     if (!this.enabled || !this.spinning) return;
     const frame = ansi.cyan(this.frames[this.frameIndex]);
-    this.stream.write(`\r\x1b[K${frame} ${this.text}`);
+    const timerStr =
+      this.showTimer && this.startTime
+        ? ` ${ansi.dim(`(${this.formatDuration(this.getElapsed())})`)}`
+        : '';
+    this.stream.write(`\r\x1b[K${frame} ${this.text}${timerStr}`);
   }
 
   /**
-   * Updates spinner text
+   * Updates spinner text without resetting stage timer
    * @param {string} text
    * @returns {Spinner}
    */
@@ -102,6 +155,8 @@ export class Spinner {
    */
   stop() {
     if (!this.spinning) return this;
+
+    this.lastElapsed = this.getElapsed();
 
     if (this.timer) {
       clearInterval(this.timer);
@@ -127,9 +182,13 @@ export class Spinner {
    */
   succeed(text) {
     const msg = text !== undefined ? text : this.text;
+    const durationSuffix =
+      this.showDurationOnFinish && this.startTime
+        ? ` ${ansi.dim(`(${this.formatDuration(this.getElapsed())})`)}`
+        : '';
     this.stop();
     const symbol = ansi.green('✔');
-    this.stream.write(`${symbol} ${msg}\n`);
+    this.stream.write(`${symbol} ${msg}${durationSuffix}\n`);
     return this;
   }
 
@@ -140,9 +199,13 @@ export class Spinner {
    */
   fail(text) {
     const msg = text !== undefined ? text : this.text;
+    const durationSuffix =
+      this.showDurationOnFinish && this.startTime
+        ? ` ${ansi.dim(`(${this.formatDuration(this.getElapsed())})`)}`
+        : '';
     this.stop();
     const symbol = ansi.red('✖');
-    this.stream.write(`${symbol} ${msg}\n`);
+    this.stream.write(`${symbol} ${msg}${durationSuffix}\n`);
     return this;
   }
 
@@ -153,9 +216,13 @@ export class Spinner {
    */
   warn(text) {
     const msg = text !== undefined ? text : this.text;
+    const durationSuffix =
+      this.showDurationOnFinish && this.startTime
+        ? ` ${ansi.dim(`(${this.formatDuration(this.getElapsed())})`)}`
+        : '';
     this.stop();
     const symbol = ansi.yellow('⚠');
-    this.stream.write(`${symbol} ${msg}\n`);
+    this.stream.write(`${symbol} ${msg}${durationSuffix}\n`);
     return this;
   }
 
@@ -166,9 +233,13 @@ export class Spinner {
    */
   info(text) {
     const msg = text !== undefined ? text : this.text;
+    const durationSuffix =
+      this.showDurationOnFinish && this.startTime
+        ? ` ${ansi.dim(`(${this.formatDuration(this.getElapsed())})`)}`
+        : '';
     this.stop();
     const symbol = ansi.cyan('ℹ');
-    this.stream.write(`${symbol} ${msg}\n`);
+    this.stream.write(`${symbol} ${msg}${durationSuffix}\n`);
     return this;
   }
 

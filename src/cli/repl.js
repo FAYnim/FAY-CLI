@@ -121,6 +121,7 @@ export async function startRepl(options = {}) {
   let _wizardActive = false; // true while a sub-readline wizard owns stdin
   let lastIterations = 0;
   let turnCount = 0;
+  let lastDurationMs = 0;
 
   // Ctrl+C while a turn is running aborts it. While idle, the prompt editor
   // owns raw mode and routes Ctrl+C to handleCtrlC below instead.
@@ -148,7 +149,7 @@ export async function startRepl(options = {}) {
   const promptSuggestions = (text, cursor) =>
     getSuggestions(text, cursor, { workingDir: orchestrator.workingDir });
 
-  // Prints the one-line session status (tokens · context · loops) that the
+  // Prints the one-line session status (tokens · context · loops · duration) that the
   // user sees above every new prompt. Reads fresh session state so it is
   // correct on success, error, and abort paths alike.
   const printStatusLine = () => {
@@ -160,6 +161,7 @@ export async function startRepl(options = {}) {
         contextBudget: contextBudgetLimit(orchestrator.maxContextTokens),
         iterations: lastIterations,
         maxIterations: orchestrator.maxIterations,
+        durationMs: lastDurationMs,
       })}\n`,
     );
   };
@@ -221,11 +223,13 @@ export async function startRepl(options = {}) {
       if (slashResult?.action === 'new_session') {
         turnCount = 0;
         lastIterations = 0;
+        lastDurationMs = 0;
       }
       if (slashResult?.action === 'switch_session') {
         const newSession = slashResult.session || orchestrator.getSession();
         turnCount = newSession.messages ? newSession.messages.length : 0;
         lastIterations = 0;
+        lastDurationMs = 0;
 
         const titleDisplay = newSession.title ? `"${newSession.title}"` : ansi.dim('(Untitled)');
         output.write(
@@ -260,6 +264,7 @@ export async function startRepl(options = {}) {
     const spinner = createSpinner({ stream: output });
     activeSpinner = spinner; // expose to SecurityGuard callbacks
     let hasStreamedToken = false;
+    const turnStartTime = Date.now();
 
     try {
       const providerName = orchestrator.provider ? orchestrator.provider.toUpperCase() : 'LLM';
@@ -351,6 +356,7 @@ export async function startRepl(options = {}) {
         output.write('\n');
       }
     } finally {
+      lastDurationMs = Date.now() - turnStartTime;
       isBusy = false;
       activeAbortController = null;
       activeSpinner = null;
