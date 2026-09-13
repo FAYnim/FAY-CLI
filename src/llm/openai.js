@@ -160,6 +160,12 @@ export class OpenAIClient extends BaseLlmClient {
       if (generationConfig.maxOutputTokens !== undefined) {
         payload.max_tokens = generationConfig.maxOutputTokens;
       }
+      if (
+        generationConfig.responseMimeType === 'application/json' ||
+        generationConfig.response_format?.type === 'json_object'
+      ) {
+        payload.response_format = { type: 'json_object' };
+      }
     }
 
     return payload;

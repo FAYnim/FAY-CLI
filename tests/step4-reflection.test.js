@@ -203,6 +203,16 @@ describe('Step 4b: Reflection Checker', () => {
       assert.equal(result.finish, true);
       assert.equal(result.reason, 'All objectives met successfully');
     });
+
+    test('OpenAIClient buildRequestBody maps responseMimeType to response_format', async () => {
+      const { OpenAIClient } = await import('../src/llm/openai.js');
+      const client = new OpenAIClient({ apiKey: 'mock-key' });
+      const body = client.buildRequestBody({
+        contents: 'test',
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      assert.deepEqual(body.response_format, { type: 'json_object' });
+    });
   });
 
   // ─── Orchestrator integration tests ─────────────────────────────────────────
