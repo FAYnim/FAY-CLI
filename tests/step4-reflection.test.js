@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { AgentOrchestrator } from '../src/agent/orchestrator.js';
 import { createReflectionChecker, ReflectionChecker } from '../src/agent/reflection.js';
 import { SessionManager } from '../src/agent/session.js';
+import { OpenAIClient } from '../src/llm/openai.js';
 
 describe('Step 4b: Reflection Checker', () => {
   let tempDir;
@@ -204,8 +205,7 @@ describe('Step 4b: Reflection Checker', () => {
       assert.equal(result.reason, 'All objectives met successfully');
     });
 
-    test('OpenAIClient buildRequestBody maps responseMimeType to response_format', async () => {
-      const { OpenAIClient } = await import('../src/llm/openai.js');
+    test('OpenAIClient buildRequestBody maps responseMimeType to response_format', () => {
       const client = new OpenAIClient({ apiKey: 'mock-key' });
       const body = client.buildRequestBody({
         contents: 'test',
@@ -280,6 +280,9 @@ describe('Step 4b: Reflection Checker', () => {
           }
           return { text: 'Selesai!', functionCalls: [] };
         },
+        generate: async () => ({
+          text: JSON.stringify({ finish: false, reason: 'Masih perlu memproses' }),
+        }),
       };
 
       const session = sessionManager.createSession({ workingDir: tempDir });
@@ -290,6 +293,8 @@ describe('Step 4b: Reflection Checker', () => {
         autoApprove: true,
         maxIterations: 10,
       });
+
+      fs.writeFileSync(path.join(tempDir, 'input.txt'), 'halo dunia', 'utf-8');
 
       const result = await orchestrator.runTurn('Baca input.txt dan tulis ke output.txt', {
         reflectionInterval: 1,
