@@ -124,3 +124,60 @@ describe('Project Instructions: loadInstructions()', () => {
     assert.equal(res.text, '');
   });
 });
+
+import { AgentOrchestrator } from '../src/agent/orchestrator.js';
+
+describe('Project Instructions: AgentOrchestrator Integration', () => {
+  let tmpBase;
+
+  beforeEach(() => {
+    tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-orch-test-'));
+    fs.writeFileSync(path.join(tmpBase, 'package.json'), '{}');
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    } catch (_) {}
+  });
+
+  test('orchestrator loads instructions and injects into effective system instruction', () => {
+    fs.writeFileSync(path.join(tmpBase, 'AGENTS.md'), 'Repo Instruction: Never use var');
+
+    const dummyClient = {
+      getModel: () => 'test-model',
+      generate: async () => ({ content: 'ok' }),
+    };
+
+    const orchestrator = new AgentOrchestrator({
+      workingDir: tmpBase,
+      llmClient: dummyClient,
+    });
+
+    assert.equal(orchestrator.getInstructionFiles().length, 1);
+    assert.ok(orchestrator.getInstructionFiles()[0].endsWith('AGENTS.md'));
+    assert.ok(orchestrator.getCustomInstructions().includes('Repo Instruction: Never use var'));
+
+    const sys = orchestrator.getEffectiveSystemInstruction();
+    assert.ok(sys.includes('### CUSTOM USER INSTRUCTIONS:'));
+    assert.ok(sys.includes('Repo Instruction: Never use var'));
+  });
+
+  test('explicit systemInstruction override bypasses AGENTS.md loading', () => {
+    fs.writeFileSync(path.join(tmpBase, 'AGENTS.md'), 'Repo Instruction: Should not load');
+
+    const dummyClient = {
+      getModel: () => 'test-model',
+    };
+
+    const orchestrator = new AgentOrchestrator({
+      workingDir: tmpBase,
+      llmClient: dummyClient,
+      systemInstruction: 'Hardcoded override system prompt',
+    });
+
+    assert.equal(orchestrator.getInstructionFiles().length, 0);
+    assert.equal(orchestrator.getCustomInstructions(), null);
+    assert.equal(orchestrator.getEffectiveSystemInstruction(), 'Hardcoded override system prompt');
+  });
+});
