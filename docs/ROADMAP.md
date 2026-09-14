@@ -46,7 +46,7 @@ yang di-load ke UI sekali di awal sesi.
 
 ---
 
-## 2. Cost & Token Usage di Status Line — Prioritas 2 · Mudah
+## 2. Cost & Token Usage di Status Line — Prioritas 2 · Mudah (tidak perlu)
 
 **Status saat ini.** `src/agent/usage.js` sudah lengkap:
 `createUsage`, `accumulateUsage`, `getContextTokens`, `contextBudgetLimit`.
