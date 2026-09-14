@@ -201,3 +201,10 @@ window sendiri = konteks induk tetap bersih.
 **Kenapa prioritas 7.** Paling mahal, paling banyak edge case (biaya berlipat,
 recursion, UX parallelism), dan nilainya baru terasa setelah compaction (#
 sudah ada) dirasa kurang oleh user nyata. Validasi demand dulu lewat #1–5.
+
+---
+
+## Remediasi Audit Keamanan (2026-09-14)
+
+Prioritas perbaikan audit (`docs/AUDIT-FINDINGS-2026-09-14.md`):
+- H-1 ✅ (fix: 3 lapis — protected regex, risky verbs + Windows, command-text jail check)

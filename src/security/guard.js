@@ -4,11 +4,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import readline from 'node:readline';
 import { configManager } from '../config/manager.js';
 import { showConfirmDialog } from '../ui/confirm-menu.js';
 import { renderDiffPreview } from '../ui/diff-preview.js';
-import { ansi } from '../utils/ansi.js';
 import { logger } from '../utils/logger.js';
 import { findPathsOutsideJail } from './command-paths.js';
 import { validateSafePath } from './path-validator.js';
@@ -39,8 +37,10 @@ export class SecurityGuard {
     this.confirmationHandler = options.confirmationHandler || null;
     this.defaultTimeoutMs =
       options.defaultTimeoutMs || DEFAULT_SECURITY_CONFIG.defaultCommandTimeoutMs;
-    this.onBeforeConfirm = typeof options.onBeforeConfirm === 'function' ? options.onBeforeConfirm : null;
-    this.onAfterConfirm = typeof options.onAfterConfirm === 'function' ? options.onAfterConfirm : null;
+    this.onBeforeConfirm =
+      typeof options.onBeforeConfirm === 'function' ? options.onBeforeConfirm : null;
+    this.onAfterConfirm =
+      typeof options.onAfterConfirm === 'function' ? options.onAfterConfirm : null;
     this._stream = options.stream || null;
     this.mode = options.mode || 'build';
   }
@@ -170,7 +170,8 @@ export class SecurityGuard {
     const legacyMessage =
       typeof messageOrOptions === 'string'
         ? messageOrOptions
-        : messageOrOptions?.description || 'AI ingin melakukan tindakan yang memerlukan konfirmasi.';
+        : messageOrOptions?.description ||
+          'AI ingin melakukan tindakan yang memerlukan konfirmasi.';
 
     if (typeof this.confirmationHandler === 'function') {
       return await this.confirmationHandler(legacyMessage);
@@ -224,11 +225,13 @@ export class SecurityGuard {
       if (toolName === 'write_file') {
         const rawPath = args.filePath || '';
         const normalized = path.normalize(rawPath).replace(/\\/g, '/');
-        const isPlanFolder = normalized.includes('/.fay/plans/') || normalized.startsWith('.fay/plans/');
+        const isPlanFolder =
+          normalized.includes('/.fay/plans/') || normalized.startsWith('.fay/plans/');
         if (!isPlanFolder) {
           return {
             allowed: false,
-            reason: 'File mutation is restricted to .fay/plans/ in Plan Mode. Use /build to execute.',
+            reason:
+              'File mutation is restricted to .fay/plans/ in Plan Mode. Use /build to execute.',
           };
         }
       }
@@ -277,7 +280,9 @@ export class SecurityGuard {
           const description = outsidePaths.length
             ? 'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:'
             : 'AI ingin menjalankan perintah shell yang mungkin berisiko:';
-          const target = outsidePaths.length ? `${command}\n\nPath di luar workspace:\n${outsideList}` : command;
+          const target = outsidePaths.length
+            ? `${command}\n\nPath di luar workspace:\n${outsideList}`
+            : command;
           const confirmed = await this.promptConfirmation({
             description,
             target,
@@ -309,12 +314,19 @@ export class SecurityGuard {
             question: 'Apakah anda mengizinkannya?',
           });
           if (!confirmed) {
-            return { allowed: false, reason: `User rejected file access outside workspace for "${filePath}".` };
+            return {
+              allowed: false,
+              reason: `User rejected file access outside workspace for "${filePath}".`,
+            };
           }
         }
         let beforeContent = args._beforeContent;
         let afterContent = args._afterContent;
-        if (beforeContent === undefined && typeof args.searchString === 'string' && typeof args.replaceString === 'string') {
+        if (
+          beforeContent === undefined &&
+          typeof args.searchString === 'string' &&
+          typeof args.replaceString === 'string'
+        ) {
           try {
             const abs = pathValidation.resolvedPath || path.resolve(this.baseDir, filePath);
             if (fs.existsSync(abs)) {
@@ -339,7 +351,8 @@ export class SecurityGuard {
             question: 'Apakah anda mengizinkan perubahan ini?',
           });
           if (this.onAfterConfirm) this.onAfterConfirm(confirmed);
-          if (!confirmed) return { allowed: false, reason: `User rejected patch on "${filePath}".` };
+          if (!confirmed)
+            return { allowed: false, reason: `User rejected patch on "${filePath}".` };
         }
         return { allowed: true, resolvedPath: pathValidation.resolvedPath };
       }
@@ -436,7 +449,10 @@ export class SecurityGuard {
               question: 'Apakah anda mengizinkannya?',
             });
             if (!confirmed) {
-              return { allowed: false, reason: `User rejected git commit in "${args.workingDir}".` };
+              return {
+                allowed: false,
+                reason: `User rejected git commit in "${args.workingDir}".`,
+              };
             }
           }
         }

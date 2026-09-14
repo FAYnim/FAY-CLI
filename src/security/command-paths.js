@@ -52,7 +52,8 @@ export function tokenizeCommand(command) {
     }
     if (quote === '"') {
       if (ch === '"') quote = null;
-      else if (ch === '\\' && !IS_WINDOWS && '"$`\\'.includes(command[i + 1])) current += command[++i];
+      else if (ch === '\\' && !IS_WINDOWS && '"$`\\'.includes(command[i + 1]))
+        current += command[++i];
       else current += ch;
       continue;
     }
@@ -99,7 +100,7 @@ function looksLikePath(bare) {
   if (/^\.\.?[\\/]/.test(bare)) return true;
   if (bare.startsWith('/')) return true;
   // $VAR/path, ${VAR}/path, %VAR%\path, $env:VAR\path
-  if (/[\/\\]/.test(bare) && /[$%]\{?[\w:]+\}?(?:%|:)?[\/\\]/.test(bare)) return true;
+  if (/[/\\]/.test(bare) && /[$%]\{?[\w:]+\}?(?:%|:)?[/\\]/.test(bare)) return true;
   return false;
 }
 

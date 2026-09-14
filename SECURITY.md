@@ -19,7 +19,8 @@ Protection lives in `src/security/rules.js`, `src/security/guard.js`, and
 - Regex blacklist of dangerous commands — bypassable, treated as last line, not a boundary
 - `HARD_LIMITS`: 2000-char command cap, null-byte guard
 - `OBFUSCATION_PATTERNS`: hex escapes, base64-to-shell, eval
-- `PROTECTED_PATH_PATTERNS`: blocks `/`, `~`, `/etc`, `/boot`, `/var/lib`
+- `PROTECTED_PATH_PATTERNS`: hard-blocks `/`, `/*`, `~`/`~/...`, `$HOME`, `%USERPROFILE%`, `$env:USERPROFILE`, and system dirs (`/etc`, `/boot`, `/var`, `/root`, `/usr`, `/bin`, `/sbin`, `/lib`, `/sdcard`, `/storage`, `C:\Windows`, `C:\Program Files`) — with path tails (`/etc/crontab` now caught), regardless of verb or `-y`.
+- `command-paths.js`: tokenizes command text (quote-aware) and prompts HITL before any unquoted path token resolves outside the jail.
 - Path validation restricts writes to the safe workspace; `security.allowTermuxStorage`
   is opt-in (`faycli config set security.allowTermuxStorage true`)
 

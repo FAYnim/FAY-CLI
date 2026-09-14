@@ -45,13 +45,13 @@ export const PROTECTED_PATH_PATTERNS = [
   /(^|[\s;&|><"'(])\/\*(?=$|[\s;&|><"'])/i,
   /(^|[\s;&|><"'(])\/(?=$|[\s;&|><"'])/i,
   // home shortcut: `~` atau `~/...` (tidak kena `HEAD~1`, tidak kena `~user`)
-  /(^|[\s;&|><"'(])~(?![\w-])(?:[\/\\][^\s;&|><"']*)?/i,
+  /(^|[\s;&|><"'(])~(?![\w-])(?:[/\\][^\s;&|><"']*)?/i,
   // $HOME / ${HOME} (+ tail)
-  /(^|[\s;&|><"'(])\$\{?(?:HOME|USERPROFILE)\}?(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  /(^|[\s;&|><"'(])\$\{?(?:HOME|USERPROFILE)\}?(?![\w])(?:[/\\][^\s;&|><"']*)?/i,
   // %USERPROFILE% / %HOME% Windows (+ tail)
-  /(^|[\s;&|><"'(])%(?:USERPROFILE|HOME)%(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  /(^|[\s;&|><"'(])%(?:USERPROFILE|HOME)%(?![\w])(?:[/\\][^\s;&|><"']*)?/i,
   // $env:USERPROFILE PowerShell (+ tail)
-  /(^|[\s;&|><"'(])\$env:(?:HOME|USERPROFILE)(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  /(^|[\s;&|><"'(])\$env:(?:HOME|USERPROFILE)(?![\w])(?:[/\\][^\s;&|><"']*)?/i,
   // direktori sistem POSIX — bare atau + tail
   /(^|[\s;&|><"'(])\/(?:etc|boot|var|root|usr|bin|sbin|lib|sdcard|storage)(?![\w-])(?:\/[^\s;&|><"']*)?/i,
   // direktori sistem Windows

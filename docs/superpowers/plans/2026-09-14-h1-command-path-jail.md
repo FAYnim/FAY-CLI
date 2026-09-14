@@ -31,7 +31,7 @@ Semua baris referensi akurat per HEAD `397b7a8`; kalau bergeser, cari pola teks 
 
 Bug inti: karakter setelah path **wajib** `[\s;&|><]`, jadi `~/.bashrc` (disusul `/`) dan `/etc/crontab` tidak match. Fix: tail path diizinkan lewat `(?:\/[^\s;&|><"']*)?`, plus kelas prekursor diperluas (`"'(`) supaya `">>/etc/...` dan `"${HOME}/..."` ikut kena. `/home` sengaja TIDAK masuk protected (jail user Windows/Linux sering di bawahnya) — itu ditangani Task 3 (prompt, bukan deny).
 
-- [ ] **Step 1: Tulis test gagal**
+- [x] **Step 1: Tulis test gagal**
 
 Buat `tests/h1-command-jail.test.js`:
 
@@ -118,12 +118,12 @@ describe('H-1: command path jail', () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/h1-command-jail.test.js`
 Expected: FAIL di describe `PROTECTED_PATH_PATTERNS` — `sed -i ... ~/.bashrc` `isBlacklisted === false`. (Error import `command-paths.js` di header belum dipakai test Task 1 ini — jika runner gagal karena modul belum ada, hapus dulu baris import `command-paths.js`, tambahkan lagi di Task 3.)
 
-- [ ] **Step 3: Implementasi — ganti blok `PROTECTED_PATH_PATTERNS` di `src/security/rules.js:38-46`**
+- [x] **Step 3: Implementasi — ganti blok `PROTECTED_PATH_PATTERNS` di `src/security/rules.js:38-46`**
 
 Komentar baru di atas array (ganti komentar SEC-03 lama, tetap awali `SEC-03` + satu baris catatan H-1):
 
@@ -159,12 +159,12 @@ export const PROTECTED_PATH_PATTERNS = [
 
 Keep comment `SEC-03` lama di atasnya, tambah satu baris penjelasan fix H-1.
 
-- [ ] **Step 4: Jalankan test baru + test lama**
+- [x] **Step 4: Jalankan test baru + test lama**
 
 Run: `node --test tests/h1-command-jail.test.js tests/step2-security.test.js`
 Expected: PASS semua. Khususnya `dangerousCommands` lama (`rm -rf ~`, `rm -rf /*`, `rm -rf $HOME`, `chmod -R 777 /`) masih blacklisted, dan `git reset --hard HEAD~1` masih `isBlacklisted: false, isRisky: true`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/security/rules.js tests/h1-command-jail.test.js
@@ -177,7 +177,7 @@ git commit -m "fix(security): close protected-path regex gaps and add Windows/ho
 
 Menutup celah: `sed`/`mv`/`ln`/`truncate`/`tee`/redirect ke path absolut tidak pernah berstatus risky; verbs Windows (`rd /s`, `del /f`, `Remove-Item`) tidak match apa pun.
 
-- [ ] **Step 1: Tulis test gagal**
+- [x] **Step 1: Tulis test gagal**
 
 Tambah di dalam `describe('H-1: command path jail', ...)` (sebelum closing `});` terakhir file test):
 
@@ -245,12 +245,12 @@ Tambah di dalam `describe('H-1: command path jail', ...)` (sebelum closing `});`
   });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/h1-command-jail.test.js`
 Expected: FAIL — `sed -i s/a/b/ notes.txt` `isRisky === false`, `del /f notes.txt` tidak risky, `rd /s /q C:\` tidak blacklisted.
 
-- [ ] **Step 3: Implementasi — `src/security/rules.js`**
+- [x] **Step 3: Implementasi — `src/security/rules.js`**
 
 a. Append di akhir array `BLACKLIST_PATTERNS` (setelah pola `mount`, sebelum `];`):
 
@@ -287,7 +287,7 @@ b. Append di akhir array `RISKY_COMMAND_PATTERNS` (`rules.js:77-98`, setelah pol
   /\bRemove-Item\b/i,
 ```
 
-- [ ] **Step 4: Jalankan test baru + lama**
+- [x] **Step 4: Jalankan test baru + lama**
 
 Run: `node --test tests/h1-command-jail.test.js tests/step2-security.test.js tests/confirm-menu.test.js tests/plan-mode-security.test.js`
 Expected: PASS semua. Checkpoint penting:
@@ -296,7 +296,7 @@ Expected: PASS semua. Checkpoint penting:
 - `npm run build 2>&1` dan `make clean 2>/dev/null` tetap TIDAK risky (digit guard + device exception).
 - Daftar `riskyCommands` lama (`rm file.txt`, `git reset --hard HEAD~1`, `curl ... | bash`, ...) harus tetap `isBlacklisted: false` — pastikan pola blacklist baru tidak menangkapnya.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/security/rules.js tests/h1-command-jail.test.js
@@ -309,7 +309,7 @@ git commit -m "fix(security): gate file-mutation verbs and Windows delete comman
 
 Task 1–2 menutup payload yang sudah dikenal lewat regex. Task 3 menutup kelas umumnya: token mirip-path yang me-resolve ke luar `baseDir` → dilaporkan ke guard untuk prompt. Quoted token dilewati (data, bukan target). Ini heuristik sadar-batas: bukan parser shell penuh (ponytail di bawah).
 
-- [ ] **Step 1: Tulis test gagal**
+- [x] **Step 1: Tulis test gagal**
 
 Uncomment baris import `command-paths.js` di header file test (dikomentari sejak Task 1 karena modul belum ada), lalu tambahkan blok test berikut di dalam `describe('H-1: command path jail', ...)`:
 
@@ -399,12 +399,12 @@ Uncomment baris import `command-paths.js` di header file test (dikomentari sejak
   });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/h1-command-jail.test.js`
 Expected: FAIL — `Cannot find module '../src/security/command-paths.js'`.
 
-- [ ] **Step 3: Implementasi — buat `src/security/command-paths.js`**
+- [x] **Step 3: Implementasi — buat `src/security/command-paths.js`**
 
 ```js
 /**
@@ -576,12 +576,12 @@ export function findPathsOutsideJail(command, baseDir, options = {}) {
 }
 ```
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `node --test tests/h1-command-jail.test.js`
 Expected: PASS semua (blok Task 1–2 dan Task 3). Test Windows-drive di platform POSIX tetap lolos karena `expandAndResolve` mengembalikan `null` (fail-closed) yang di-assert sebagai luar.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/security/command-paths.js tests/h1-command-jail.test.js
@@ -594,7 +594,7 @@ git commit -m "feat(security): add quote-aware command tokenizer and jail path e
 
 Satu prompt gabungan: command yang berisiko ATAU menyentuh path luar jail → dialog, dengan daftar path-nya di `target`. `autoApprove` (-y) tetap bypass prompt (semantik M-4, sengaja di luar scope) — protected path sudah hard-deny dari Task 1 walau `-y`.
 
-- [ ] **Step 1: Tulis test gagal**
+- [x] **Step 1: Tulis test gagal**
 
 Tambah blok berikut di dalam `describe('H-1: command path jail', ...)`:
 
@@ -661,12 +661,12 @@ Tambah blok berikut di dalam `describe('H-1: command path jail', ...)`:
   });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `node --test tests/h1-command-jail.test.js`
 Expected: FAIL — `cat <abs-luar>` saat ini `allowed: true` tanpa prompt (hanya `workingDir` yang dicek).
 
-- [ ] **Step 3: Implementasi — `src/security/guard.js`**
+- [x] **Step 3: Implementasi — `src/security/guard.js`**
 
 a. Tambah import (blok import `src/security/guard.js:13`):
 
@@ -708,12 +708,12 @@ b. Di `authorize` case `execute_command`: setelah blok `if (workingDir) {...}` (
 
 Perhatikan: test lama di `step2-security.test.js` meng-assert reason `/User denied execution/i` untuk risky — kedua cabang reason tetap cocok pola itu.
 
-- [ ] **Step 4: Jalankan seluruh test security + related**
+- [x] **Step 4: Jalankan seluruh test security + related**
 
 Run: `node --test tests/h1-command-jail.test.js tests/step2-security.test.js tests/confirm-menu.test.js tests/plan-mode-security.test.js tests/step4-orchestrator.test.js`
 Expected: PASS semua.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/security/guard.js tests/h1-command-jail.test.js
@@ -724,12 +724,12 @@ git commit -m "fix(security): validate command-text paths against workspace jail
 
 ### Task 5: Green sweep + dokumentasi
 
-- [ ] **Step 1: Full suite + lint**
+- [x] **Step 1: Full suite + lint**
 
 Run: `npm test` lalu `npm run lint`
 Expected: PASS semua, 0 error Biome (warning formatting beres via `npm run lint:fix` bila perlu).
 
-- [ ] **Step 2: Update `SECURITY.md:22`**
+- [x] **Step 2: Update `SECURITY.md:22`**
 
 Ganti baris:
 
@@ -744,11 +744,11 @@ menjadi:
 - `command-paths.js`: tokenizes command text (quote-aware) and prompts HITL before any unquoted path token resolves outside the jail.
 ```
 
-- [ ] **Step 3: Update `docs/ROADMAP.md`**
+- [x] **Step 3: Update `docs/ROADMAP.md`**
 
 Di bagian remediasi audit, tandai H-1 selesai: `H-1 ✅ (fix: 3 lapis — protected regex, risky verbs + Windows, command-text jail check)`. Kalau belum ada entri remediasi H-1 di ROADMAP, tambahkan satu baris di bawah bagian prioritas perbaikan audit.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add SECURITY.md docs/ROADMAP.md
