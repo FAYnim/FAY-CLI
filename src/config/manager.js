@@ -237,7 +237,9 @@ export class ConfigManager {
       fs.copyFileSync(tmpPath, configPath);
       try {
         fs.unlinkSync(tmpPath);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: leftover tmp file after copy fallback is cosmetic */
+      }
     }
 
     // BUG-03: refresh cache eagerly so the next loadConfig() returns

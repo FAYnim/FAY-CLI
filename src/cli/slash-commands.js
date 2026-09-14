@@ -897,7 +897,9 @@ export async function executeSlashCommand(input, context = {}) {
         try {
           const stats = fs.statSync(f);
           sizeInfo = ` ${ansi.dim(`(${stats.size} bytes)`)}`;
-        } catch (_) {}
+        } catch {
+          /* silent-ok: statSync is display-only size hint */
+        }
         stream.write(`  ${ansi.green('•')} ${ansi.white(f)}${sizeInfo}\n`);
       }
       stream.write('\n');

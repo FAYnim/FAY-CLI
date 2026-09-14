@@ -190,7 +190,9 @@ export async function runProviderAddWizard(ctx = {}) {
     // SIGINT or stream closed mid-wizard
     try {
       rl.close();
-    } catch (_) {}
+    } catch {
+      /* silent-ok: rl may already be closed when wizard is interrupted */
+    }
     write(`\n${ansi.yellow('  ⚠')} Provider add cancelled.\n\n`);
     return { cancelled: true };
   }

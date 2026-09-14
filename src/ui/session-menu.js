@@ -155,7 +155,9 @@ export async function showSessionMenu({
     if (typeof input.setRawMode === 'function') {
       try {
         input.setRawMode(true);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: non-TTY input, keypress mode unavailable */
+      }
     }
     readline.emitKeypressEvents(input);
 
@@ -166,12 +168,16 @@ export async function showSessionMenu({
     const cleanup = (result) => {
       try {
         input.removeListener('keypress', onKeypress);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       try {
         if (typeof input.setRawMode === 'function' && input.isTTY) {
           input.setRawMode(false);
         }
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       output.write('\x1B[2J\x1B[H');
       resolve(result);
     };

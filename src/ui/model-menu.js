@@ -221,15 +221,21 @@ export function showModelMenu(items, options = {}) {
     function cleanup(result) {
       try {
         input.removeListener('keypress', keypressHandler);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       try {
         if (typeof input.setRawMode === 'function' && input.isTTY) {
           input.setRawMode(false);
         }
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       try {
         input.removeListener('close', onClose);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       // Clear the menu from the screen
       clearFrame(output, 0);
       // Drain any pending keypresses that may have piled up
@@ -275,7 +281,9 @@ export async function showModelMenuFromConfig(ctx = {}) {
     try {
       // Phase 2.2: use getActiveModel() instead of getProviderConfig().model
       activeModel = configMgr.getActiveModel?.(activeProvider) || activeModel;
-    } catch (_) {}
+    } catch {
+      /* silent-ok: optional getter, fall back to previous activeModel */
+    }
   }
 
   // Build provider -> models map

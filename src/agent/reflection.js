@@ -124,7 +124,9 @@ export function parseReflectionResponse(text) {
     const parsed = JSON.parse(trimmed);
     const normalized = normalizeReflectionObject(parsed);
     if (normalized) return normalized;
-  } catch {}
+  } catch {
+    /* silent-ok: staged JSON.parse cascade; next candidate tried below */
+  }
 
   // 2. Extract content from markdown code fence block if present: ```json ... ```
   const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
@@ -133,7 +135,9 @@ export function parseReflectionResponse(text) {
       const parsed = JSON.parse(fenceMatch[1].trim());
       const normalized = normalizeReflectionObject(parsed);
       if (normalized) return normalized;
-    } catch {}
+    } catch {
+      /* silent-ok: staged JSON.parse cascade; next candidate tried below */
+    }
   }
 
   // 3. Robust substring extraction: between outermost curly braces
@@ -145,7 +149,9 @@ export function parseReflectionResponse(text) {
       const parsed = JSON.parse(candidate);
       const normalized = normalizeReflectionObject(parsed);
       if (normalized) return normalized;
-    } catch {}
+    } catch {
+      /* silent-ok: staged JSON.parse cascade; next candidate tried below */
+    }
   }
 
   return null;

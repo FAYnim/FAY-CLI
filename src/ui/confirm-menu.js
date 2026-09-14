@@ -215,16 +215,28 @@ export function showConfirmDialog(options = {}) {
     const onClose = () => done(false);
 
     function done(value) {
-      try { input.removeListener('keypress', keypressHandler); } catch (_) {}
-      try { input.removeListener('close', onClose); } catch (_) {}
+      try {
+        input.removeListener('keypress', keypressHandler);
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
+      try {
+        input.removeListener('close', onClose);
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       try {
         if (typeof input.setRawMode === 'function' && input.isTTY) {
           input.setRawMode(false);
         }
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       try {
         if (typeof input.pause === 'function') input.pause();
-      } catch (_) {}
+      } catch {
+        /* silent-ok: readline teardown best-effort */
+      }
       clear();
       resolve(value);
     }
