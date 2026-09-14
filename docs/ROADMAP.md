@@ -102,7 +102,7 @@ slug hash, bukan nama asli.
 
 ---
 
-## 4. Bersihkan Silent `catch {}` — Prioritas 4 · Mudah
+## 4. Bersihkan Silent `catch {}` — Prioritas 4 · Mudah (done)
 
 **Status saat ini.** Ditemukan ~10+ empty catch: `src/llm/openai.js`
 (baris 402, 406, 509, 603, 613, 626, 638, 659), `src/agent/reflection.js:71`,
