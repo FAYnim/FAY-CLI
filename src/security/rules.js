@@ -31,18 +31,31 @@ export const OBFUSCATION_PATTERNS = [
 ];
 
 /**
- * SEC-03: Path-based destructive guards. Broader than the existing
- * rm -rf patterns. Any command that targets these paths is rejected
- * regardless of verb (covers `find / -delete`, `rsync --delete /`, etc.).
+ * SEC-03 / H-1: Path-based destructive guards. Any command that targets
+ * these paths is rejected regardless of verb (`find / -delete`, etc.).
+ * H-1 fix: the old patterns required the char AFTER the path to be a
+ * space/`;`/`&`, so `~/.bashrc` and `/etc/crontab` slipped through — the
+ * tail group `(?:\/[^\s;&|><"']*)?` now allows a path suffix. Prefix class
+ * includes shell separators AND quotes so `">>/etc/x` matches too.
+ * `/home` is intentionally NOT listed (user jails live there); out-of-jail
+ * absolute paths are handled by command-paths.js instead.
  */
 export const PROTECTED_PATH_PATTERNS = [
-  /(^|\s)\/(?:\s|$|[;&|><])/i, // bare `/`
-  /(^|\s)\/\*(?:\s|$|[;&|><])/i, // `/*`
-  /(^|\s)~(?:\s|$|[;&|><])/i, // bare `~`
-  /(^|\s)\$\{?HOME\}?\/(?:\*)?(?:\s|$|[;&|><])/i, // $HOME
-  /(^|\s)\/etc(?:\s|$|[;&|><])/i, // /etc
-  /(^|\s)\/boot(?:\s|$|[;&|><])/i, // /boot
-  /(^|\s)\/var\/lib(?:\s|$|[;&|><])/i, // /var/lib
+  // bare `/` atau `/*`
+  /(^|[\s;&|><"'(])\/\*(?=$|[\s;&|><"'])/i,
+  /(^|[\s;&|><"'(])\/(?=$|[\s;&|><"'])/i,
+  // home shortcut: `~` atau `~/...` (tidak kena `HEAD~1`, tidak kena `~user`)
+  /(^|[\s;&|><"'(])~(?![\w-])(?:[\/\\][^\s;&|><"']*)?/i,
+  // $HOME / ${HOME} (+ tail)
+  /(^|[\s;&|><"'(])\$\{?(?:HOME|USERPROFILE)\}?(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  // %USERPROFILE% / %HOME% Windows (+ tail)
+  /(^|[\s;&|><"'(])%(?:USERPROFILE|HOME)%(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  // $env:USERPROFILE PowerShell (+ tail)
+  /(^|[\s;&|><"'(])\$env:(?:HOME|USERPROFILE)(?![\w])(?:[\/\\][^\s;&|><"']*)?/i,
+  // direktori sistem POSIX — bare atau + tail
+  /(^|[\s;&|><"'(])\/(?:etc|boot|var|root|usr|bin|sbin|lib|sdcard|storage)(?![\w-])(?:\/[^\s;&|><"']*)?/i,
+  // direktori sistem Windows
+  /(^|[\s;&|><"'(])[A-Za-z]:[\\/](?:Windows|Program Files(?: \(x86\))?)(?![\w])(?:[\\/][^\s;&|><"']*)?/i,
 ];
 
 /**
