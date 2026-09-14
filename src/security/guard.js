@@ -9,6 +9,7 @@ import { configManager } from '../config/manager.js';
 import { showConfirmDialog } from '../ui/confirm-menu.js';
 import { renderDiffPreview } from '../ui/diff-preview.js';
 import { ansi } from '../utils/ansi.js';
+import { logger } from '../utils/logger.js';
 import { validateSafePath } from './path-validator.js';
 import {
   BLACKLIST_PATTERNS,
@@ -307,7 +308,9 @@ export class SecurityGuard {
               beforeContent = fs.readFileSync(abs, 'utf-8');
               afterContent = beforeContent.replace(args.searchString, args.replaceString);
             }
-          } catch {}
+          } catch (err) {
+            logger.debug('guard.checkToolCall: beforeContent read failed', err);
+          }
         }
         if (!this.autoApprove && beforeContent !== undefined && afterContent !== undefined) {
           const preview = renderDiffPreview({

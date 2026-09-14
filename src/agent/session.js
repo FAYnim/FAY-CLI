@@ -14,6 +14,7 @@ import {
   createUserMessage,
   normalizeContent,
 } from '../llm/types.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Generates a unique, timestamped session ID
@@ -319,7 +320,9 @@ export class SessionManager {
       fs.copyFileSync(tmpPath, targetPath);
       try {
         fs.unlinkSync(tmpPath);
-      } catch (_) {}
+      } catch {
+        /* silent-ok: leftover tmp file after copy fallback is cosmetic */
+      }
     }
 
     return true;
@@ -480,7 +483,9 @@ export class SessionManager {
       try {
         fs.unlinkSync(path.join(dir, file));
         count++;
-      } catch {}
+      } catch (err) {
+        logger.debug('session.clearSessions: unlink failed', err);
+      }
     }
     return count;
   }
