@@ -81,6 +81,13 @@ export const BLACKLIST_PATTERNS = [
 
   // System partition remounts in Android/Linux
   /\bmount\s+.*-o\s+.*remount,rw\s+\/(system|vendor|product)?/i,
+
+  // H-1: Windows root-drive wipes and formatters. `format` + drive letter
+  // always deny (volume label is `label`, not `format`).
+  /\bformat(?:\.com)?\s+[a-z]:/i,
+  /\b(rd|rmdir)\s+\/[a-z]\s*(?:\/[a-z]\s*)*[a-z]:\\(?:\*)?(?=$|[\s;&|])/i,
+  /\b(del|erase)\s+\/[a-z]\s*(?:\/[a-z]\s*)*[a-z]:\\(?:\*)?(?=$|[\s;&|])/i,
+  /\bRemove-Item\b.*-Recurse.*-Force.*(?:[a-z]:\\(?:\*)?(?=$|[\s;&|])|%USERPROFILE%)/i,
 ];
 
 /**
@@ -108,6 +115,25 @@ export const RISKY_COMMAND_PATTERNS = [
 
   // Global installations
   /\b(npm|yarn|pnpm)\s+install\s+-g\b/i,
+
+  // H-1: in-place file rewriting (`sed -i` / `sed -i.bak`).
+  /\bsed\s+-i(\.\S*)?\b/i,
+
+  // H-1: file-mutation verbs — `git mv` dikecualikan via negative lookbehind
+  // (harus TEPAT di depan verb; kalau di depan separator, spasi "git " ikut
+  // terkonsumsi dan lookbehind tidak melihatnya).
+  /(?:^|[;&|()\s])(?<!git\s)(mv|rename|ln|truncate|tee|rsync)(?=$|[\s;&|])/i,
+
+  // H-1: output redirect ke path absolut / home-ish. Digit sebelum `>`
+  // (fd dup: `2>/dev/null`, `2>&1`) dikecualikan; device nodes dikecualikan.
+  // Redirect ke path RELATIF dalam-jail (`echo x > log.txt`) TIDAK gated —
+  // hanya target absolut/home-ish (`~`, `$`, `%`, `X:\`, `/`).
+  /(^|[^0-9])>{1,2}\s*["']?(?:~|\$|%|[A-Za-z]:[\\/]|\/(?!dev\/(?:null|stdout|stderr|zero)))/i,
+
+  // H-1: Windows deletion verbs (cmd + PowerShell). Root-drive variant
+  // ditangani BLACKLIST (deny); `Remove-Item` plain hanya risky di sini.
+  /\b(rd|rmdir|del|erase)\s+\/[a-z]/i,
+  /\bRemove-Item\b/i,
 ];
 
 /**

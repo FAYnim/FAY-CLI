@@ -77,4 +77,66 @@ describe('H-1: command path jail', () => {
       }
     });
   });
+
+  describe('RISKY/BLACKLIST tambahan', () => {
+    test('file-mutation verbs jadi risky', () => {
+      // Catatan: `echo x >> ./log.txt` TIDAK di sini — redirect ke path
+      // dalam-jail tidak perlu prompt; yang gated hanya redirect absolut/home-ish.
+      for (const cmd of [
+        'sed -i s/a/b/ notes.txt',
+        'mv src ../outside',
+        'ln -s ../secret ./notes.txt',
+        'truncate -s 0 file.txt',
+        'echo x | tee out.txt',
+        'rsync -a src/ dst/',
+        'echo secret > /tmp/x.txt',
+      ]) {
+        const insp = guard.inspectCommand(cmd);
+        assert.equal(insp.isRisky, true, `harus risky: ${cmd}`);
+        assert.equal(insp.isBlacklisted, false, `tidak boleh deny: ${cmd}`);
+      }
+    });
+
+    test('verbs Windows jadi risky', () => {
+      for (const cmd of [
+        'del /f notes.txt',
+        'rd /s /q build',
+        'Remove-Item -Recurse -Force dir',
+        'powershell -c "Remove-Item x"',
+      ]) {
+        const insp = guard.inspectCommand(cmd);
+        assert.equal(insp.isRisky, true, `harus risky: ${cmd}`);
+        assert.equal(insp.isBlacklisted, false, `tidak boleh deny: ${cmd}`);
+      }
+    });
+
+    test('wipe root drive diblok total', () => {
+      for (const cmd of [
+        'rd /s /q C:\\',
+        'format C:',
+        'Remove-Item -Recurse -Force C:\\',
+      ]) {
+        assert.equal(guard.inspectCommand(cmd).isBlacklisted, true, `harus deny: ${cmd}`);
+      }
+    });
+
+    test('perintah jail biasa tetap tidak risky', () => {
+      for (const cmd of [
+        'git status',
+        'ls -la',
+        'npm test',
+        'cat package.json',
+        'node index.js',
+        'echo hi',
+        'npm run build 2>&1',
+        'make clean 2>/dev/null',
+        'git mv a.txt b.txt',
+        'node -e "console.log(1)"',
+      ]) {
+        const insp = guard.inspectCommand(cmd);
+        assert.equal(insp.isRisky, false, `tidak boleh risky: ${cmd}`);
+        assert.equal(insp.isBlacklisted, false, `tidak boleh deny: ${cmd}`);
+      }
+    });
+  });
 });

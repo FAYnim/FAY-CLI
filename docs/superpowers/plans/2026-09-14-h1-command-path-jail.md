@@ -255,9 +255,9 @@ Expected: FAIL — `sed -i s/a/b/ notes.txt` `isRisky === false`, `del /f notes.
 a. Append di akhir array `BLACKLIST_PATTERNS` (setelah pola `mount`, sebelum `];`):
 
 ```js
-  // H-1: Windows root-drive wipes and formatters. `format C: Label` (tanpa
-  // switch) TIDAK di-blok — volume label, bukan destructive wipe.
-  /\bformat(?:\.com)?\s+[a-z]:\s*[\/\\]/i,
+  // H-1: Windows root-drive wipes and formatters. `format` + drive letter
+  // selalu deny (volume label = perintah `label`, bukan `format`).
+  /\bformat(?:\.com)?\s+[a-z]:/i,
   /\b(rd|rmdir)\s+\/[a-z]\s*(?:\/[a-z]\s*)*[a-z]:\\(?:\*)?(?=$|[\s;&|])/i,
   /\b(del|erase)\s+\/[a-z]\s*(?:\/[a-z]\s*)*[a-z]:\\(?:\*)?(?=$|[\s;&|])/i,
   /\bRemove-Item\b.*-Recurse.*-Force.*(?:[a-z]:\\(?:\*)?(?=$|[\s;&|])|%USERPROFILE%)/i,
@@ -270,8 +270,9 @@ b. Append di akhir array `RISKY_COMMAND_PATTERNS` (`rules.js:77-98`, setelah pol
   /\bsed\s+-i(\.\S*)?\b/i,
 
   // H-1: file-mutation verbs — `git mv` dikecualikan via negative lookbehind.
-  // (?<!...) harus di depan GROUP, bukan di dalam alternation.
-  /(?<!git\s)(?:^|[;&|()\s])(mv|rename|ln|truncate|tee|rsync)(?=$|[\s;&|])/i,
+  // (?<!...) harus TEPAT di depan verb; kalau di depan separator, spasi
+  // "git " ikut terkonsumsi group dan lookbehind tidak melihatnya.
+  /(?:^|[;&|()\s])(?<!git\s)(mv|rename|ln|truncate|tee|rsync)(?=$|[\s;&|])/i,
 
   // H-1: output redirect ke path absolut / home-ish. Digit sebelum `>`
   // (fd dup: `2>/dev/null`, `2>&1`) dikecualikan; device nodes dikecualikan.
