@@ -10,6 +10,7 @@ import { showConfirmDialog } from '../ui/confirm-menu.js';
 import { renderDiffPreview } from '../ui/diff-preview.js';
 import { ansi } from '../utils/ansi.js';
 import { logger } from '../utils/logger.js';
+import { findPathsOutsideJail } from './command-paths.js';
 import { validateSafePath } from './path-validator.js';
 import {
   BLACKLIST_PATTERNS,
@@ -266,16 +267,28 @@ export class SecurityGuard {
           }
         }
 
-        if (inspection.isRisky && !this.autoApprove) {
+        // H-1: paths appearing inside the command text must respect the jail
+        // too — validateSafePath was only ever applied to `workingDir`.
+        const outsidePaths = findPathsOutsideJail(command, this.baseDir, this._pathOptions());
+        const needsPrompt = inspection.isRisky || outsidePaths.length > 0;
+
+        if (needsPrompt && !this.autoApprove) {
+          const outsideList = outsidePaths.map((p) => `- ${p.raw}`).join('\n');
+          const description = outsidePaths.length
+            ? 'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:'
+            : 'AI ingin menjalankan perintah shell yang mungkin berisiko:';
+          const target = outsidePaths.length ? `${command}\n\nPath di luar workspace:\n${outsideList}` : command;
           const confirmed = await this.promptConfirmation({
-            description: 'AI ingin menjalankan perintah shell yang mungkin berisiko:',
-            target: command,
+            description,
+            target,
             question: 'Apakah anda mengizinkannya?',
           });
           if (!confirmed) {
             return {
               allowed: false,
-              reason: `User denied execution of risky command: "${command}".`,
+              reason: outsidePaths.length
+                ? `User denied execution: command touches paths outside workspace ("${outsidePaths[0].raw}").`
+                : `User denied execution of risky command: "${command}".`,
             };
           }
         }

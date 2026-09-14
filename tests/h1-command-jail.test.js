@@ -228,4 +228,65 @@ describe('H-1: command path jail', () => {
       }
     });
   });
+
+  describe('authorize(execute_command) — prompt untuk path luar jail', () => {
+    test('menolak command yang menyentuh path luar saat user deny', async () => {
+      let description = '';
+      const g = new SecurityGuard({
+        baseDir,
+        confirmationHandler: async (msg) => {
+          description = msg;
+          return false;
+        },
+      });
+      const outside = path.join(path.dirname(baseDir), 'secret.env');
+      const res = await g.authorize('execute_command', { command: `cat ${outside}` });
+      assert.equal(res.allowed, false);
+      assert.match(res.reason, /outside workspace/i);
+      assert.match(description, /luar workspace/i);
+    });
+
+    test('mengizinkan setelah user approve', async () => {
+      const g = new SecurityGuard({
+        baseDir,
+        confirmationHandler: async () => true,
+      });
+      const outside = path.join(path.dirname(baseDir), 'secret.env');
+      const res = await g.authorize('execute_command', { command: `cat ${outside}` });
+      assert.equal(res.allowed, true);
+    });
+
+    test('command in-jail tidak memicu prompt', async () => {
+      let prompted = false;
+      const g = new SecurityGuard({
+        baseDir,
+        confirmationHandler: async () => {
+          prompted = true;
+          return false;
+        },
+      });
+      fs.writeFileSync(path.join(baseDir, 'a.txt'), 'x');
+      const res = await g.authorize('execute_command', { command: 'cat a.txt' });
+      assert.equal(res.allowed, true);
+      assert.equal(prompted, false);
+    });
+
+    test('deskripsi prompt menyebut path luar saat command menyentuhnya, approve tetap lolos', async () => {
+      // `confirmationHandler` dipanggil dengan `legacyMessage` = field
+      // `description` dari dialog terstruktur (guard.js) — jadi yang
+      // di-assert deskripsinya, bukan `target`.
+      let description = '';
+      const g = new SecurityGuard({
+        baseDir,
+        confirmationHandler: async (msg) => {
+          description = msg;
+          return true;
+        },
+      });
+      const outside = path.join(path.dirname(baseDir), 'outside.txt');
+      const res = await g.authorize('execute_command', { command: `touch ${outside}` });
+      assert.equal(res.allowed, true);
+      assert.match(description, /luar workspace/i);
+    });
+  });
 });
