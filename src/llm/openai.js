@@ -3,6 +3,7 @@
  * Translates Gemini request shape -> OpenAI, parses SSE stream back into Gemini-compatible result.
  */
 import { BaseLlmClient } from './base.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Recursively converts Gemini UPPERCASE schema types to standard lowercase JSON Schema types.
@@ -405,11 +406,15 @@ export class OpenAIClient extends BaseLlmClient {
     try {
       errorDetails = await response.json();
       if (errorDetails?.error?.message) errorMessage = errorDetails.error.message;
-    } catch {}
+    } catch (err) {
+      logger.debug('openai._handleErrorResponse: response.json() failed', err);
+    }
     if (!errorMessage) {
       try {
         errorMessage = await response.text();
-      } catch {}
+      } catch (err) {
+        logger.debug('openai._handleErrorResponse: response.text() failed', err);
+      }
       if (!errorMessage) errorMessage = `HTTP error ${response.status} ${response.statusText}`;
     }
     const error = new Error(`OpenAI API Error (${response.status}): ${errorMessage}`);
@@ -512,7 +517,9 @@ function extractJsonLoose(str) {
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     try {
       return JSON.parse(str.slice(firstBrace, lastBrace + 1));
-    } catch {}
+    } catch (err) {
+      logger.debug('openai.extractJsonLoose: JSON.parse failed', err);
+    }
   }
   return null;
 }
@@ -606,7 +613,9 @@ const BLOCK_EXTRACTORS = [
       try {
         const call = resolveJsonCall(JSON.parse(match[1]), TAGGED_JSON_SHAPE);
         if (call) addCall(call.name, call.args);
-      } catch {}
+      } catch (err) {
+        logger.debug('openai.parseTextToolCalls: tagged-json parse failed', err);
+      }
     },
   },
   {
@@ -616,7 +625,9 @@ const BLOCK_EXTRACTORS = [
       try {
         const call = resolveJsonCall(JSON.parse(match[1]), FENCED_JSON_SHAPE);
         if (call) addCall(call.name, call.args);
-      } catch {}
+      } catch (err) {
+        logger.debug('openai.parseTextToolCalls: fenced-json parse failed', err);
+      }
     },
   },
 ];
@@ -629,7 +640,9 @@ function extractActionLineCall(text, addCall) {
   if (!actionMatch) return;
   try {
     addCall(actionMatch[1].trim(), JSON.parse(actionMatch[2]));
-  } catch {}
+  } catch (err) {
+    logger.debug('openai.parseTextToolCalls: action-line args failed', err);
+  }
 }
 
 /** Extracts a bare tool name directly followed by a JSON object. */
@@ -641,7 +654,9 @@ function extractInlineNameCalls(text, addCall) {
   for (const match of text.matchAll(inlinePattern)) {
     try {
       addCall(match[1], JSON.parse(match[2]));
-    } catch {}
+    } catch (err) {
+      logger.debug('openai.parseTextToolCalls: inline-name args failed', err);
+    }
   }
 }
 
@@ -662,7 +677,9 @@ function classifyStandaloneJson(text, addCall) {
       } else if (obj.filePath || obj.path) {
         addCall('read_file', obj);
       }
-    } catch {}
+    } catch {
+      /* silent-ok: not every curly-brace substring in model text is JSON */
+    }
   }
 }
 
