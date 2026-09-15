@@ -13,6 +13,7 @@ import {
   DEFAULT_CONFIG_DIR_NAME,
   DEFAULT_CONFIG_FILE_NAME,
   DEFAULT_SESSIONS_DIR_NAME,
+  DEFAULT_CHECKPOINTS_DIR_NAME,
   TERMUX_HOME_FALLBACK,
 } from './constants.js';
 
@@ -127,17 +128,29 @@ export class ConfigManager {
   }
 
   /**
+   * Get path to checkpoints directory
+   * @returns {string}
+   */
+  getCheckpointsDir() {
+    return path.join(this.getConfigDir(), DEFAULT_CHECKPOINTS_DIR_NAME);
+  }
+
+  /**
    * Ensure directory structure exists
    */
   ensureDirs() {
     const configDir = this.getConfigDir();
     const sessionsDir = this.getSessionsDir();
+    const checkpointsDir = this.getCheckpointsDir();
 
     if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
     }
     if (!fs.existsSync(sessionsDir)) {
       fs.mkdirSync(sessionsDir, { recursive: true, mode: 0o700 });
+    }
+    if (!fs.existsSync(checkpointsDir)) {
+      fs.mkdirSync(checkpointsDir, { recursive: true, mode: 0o700 });
     }
   }
 
