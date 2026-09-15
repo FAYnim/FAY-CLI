@@ -1,6 +1,6 @@
 # H-2 parseTextToolCalls Tightening & Fallback Guard Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Menutup kerentanan audit H-2 (`docs/AUDIT-FINDINGS-2026-09-14.md`): menghapus klasifikasi heuristik JSON tanpa nama tool (`classifyStandaloneJson`), memperketat pencocokan inline nama tool agar tidak memicu eksekusi dari teks biasa/prosa, memperbaiki duplikasi container `<tool_call>`, serta menandai dan meng-gate eksekusi tool call yang berasal dari fallback parsing teks via Security Guard.
 
@@ -30,7 +30,7 @@
 **Files:**
 - Create: `tests/h2-text-tool-calls.test.js`
 
-- [ ] **Step 1: Tulis test failing untuk skenario H-2**
+- [x] **Step 1: Tulis test failing untuk skenario H-2**
 
 Buat `tests/h2-text-tool-calls.test.js`:
 
@@ -183,7 +183,7 @@ describe('H-2: parseTextToolCalls hardening & fallback guard', () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan test untuk memastikan test gagal**
+- [x] **Step 2: Jalankan test untuk memastikan test gagal**
 
 Run: `node --test tests/h2-text-tool-calls.test.js`
 Expected: FAIL pada "plain JSON with command key is NOT executed as execute_command" (karena `classifyStandaloneJson` saat ini masih mengeksekusinya).
@@ -196,7 +196,7 @@ Expected: FAIL pada "plain JSON with command key is NOT executed as execute_comm
 - Modify: `src/llm/openai.js:568-580`, `src/llm/openai.js:663-684`, `src/llm/openai.js:720-731`
 - Modify: `tests/parse-text-tool-calls.test.js`
 
-- [ ] **Step 1: Perbaiki container pattern dan eliminasi `classifyStandaloneJson` di `src/llm/openai.js`**
+- [x] **Step 1: Perbaiki container pattern dan eliminasi `classifyStandaloneJson` di `src/llm/openai.js`**
 
 1. Pada `src/llm/openai.js`, ubah pattern container pertama di `BLOCK_EXTRACTORS` (baris ~572):
 Ganti:
@@ -248,7 +248,7 @@ Hapus:
   }
 ```
 
-- [ ] **Step 2: Perbarui snapshot tests lama di `tests/parse-text-tool-calls.test.js`**
+- [x] **Step 2: Perbarui snapshot tests lama di `tests/parse-text-tool-calls.test.js`**
 
 1. Pada baris ~45-54:
 Ganti:
@@ -490,12 +490,12 @@ Menjadi:
 Serta baris ~331-340 dan ~398-412 (DeepSeek-R1 realistic response):
 Ganti duplikasi `{name, arguments}` yang diharapkan menjadi clean call.
 
-- [ ] **Step 3: Jalankan test `tests/parse-text-tool-calls.test.js`**
+- [x] **Step 3: Jalankan test `tests/parse-text-tool-calls.test.js`**
 
 Run: `node --test tests/parse-text-tool-calls.test.js`
 Expected: PASS (semua 49 test lulus tanpa klasifikasi heuristik).
 
-- [ ] **Step 4: Commit Task 2**
+- [x] **Step 4: Commit Task 2**
 
 ```bash
 git add src/llm/openai.js tests/parse-text-tool-calls.test.js
@@ -510,7 +510,7 @@ git commit -m "fix(llm/openai): remove classifyStandaloneJson and container dupl
 - Modify: `src/llm/openai.js:648-661`
 - Test: `tests/h2-text-tool-calls.test.js`
 
-- [ ] **Step 1: Implementasikan pengetatan regex inline name calls**
+- [x] **Step 1: Implementasikan pengetatan regex inline name calls**
 
 Pada `src/llm/openai.js`, ubah `extractInlineNameCalls`:
 Ganti:
@@ -553,12 +553,12 @@ function extractInlineNameCalls(text, addCall) {
 }
 ```
 
-- [ ] **Step 2: Jalankan test verifikasi inline prose rejection**
+- [x] **Step 2: Jalankan test verifikasi inline prose rejection**
 
 Run: `node --test tests/h2-text-tool-calls.test.js tests/parse-text-tool-calls.test.js`
 Expected: Test pada `tests/h2-text-tool-calls.test.js` grup "Mid-sentence prose rejection" dan "Valid structured tool call extraction" PASS.
 
-- [ ] **Step 3: Commit Task 3**
+- [x] **Step 3: Commit Task 3**
 
 ```bash
 git add src/llm/openai.js
@@ -575,7 +575,7 @@ git commit -m "fix(llm/openai): restrict extractInlineNameCalls to line start an
 - Modify: `src/security/guard.js:217`, `src/security/guard.js:276-298`
 - Modify: `src/llm/openai.js:341-352`, `src/llm/openai.js:452-457`
 
-- [ ] **Step 1: Tandai `isFallback` pada calls di `src/llm/openai.js`**
+- [x] **Step 1: Tandai `isFallback` pada calls di `src/llm/openai.js`**
 
 1. Pada `src/llm/openai.js` `streamGenerate` (~341-352):
 ```js
@@ -603,7 +603,7 @@ git commit -m "fix(llm/openai): restrict extractInlineNameCalls to line start an
     }
 ```
 
-- [ ] **Step 2: Tandai dan teruskan `isFallback` di `src/agent/orchestrator.js`**
+- [x] **Step 2: Tandai dan teruskan `isFallback` di `src/agent/orchestrator.js`**
 
 1. Pada `src/agent/orchestrator.js` (~357-362):
 ```js
@@ -630,7 +630,7 @@ git commit -m "fix(llm/openai): restrict extractInlineNameCalls to line start an
         });
 ```
 
-- [ ] **Step 3: Teruskan `isFallback` di `src/tools/registry.js`**
+- [x] **Step 3: Teruskan `isFallback` di `src/tools/registry.js`**
 
 Pada `src/tools/registry.js` (~435):
 Ganti:
@@ -644,7 +644,7 @@ Menjadi:
       });
 ```
 
-- [ ] **Step 4: Update `SecurityGuard.authorize` di `src/security/guard.js`**
+- [x] **Step 4: Update `SecurityGuard.authorize` di `src/security/guard.js`**
 
 1. Ubah signature method pada baris ~217:
 ```js
@@ -731,12 +731,12 @@ Menjadi:
         }
 ```
 
-- [ ] **Step 5: Jalankan test suite keamanan H-2**
+- [x] **Step 5: Jalankan test suite keamanan H-2**
 
 Run: `node --test tests/h2-text-tool-calls.test.js`
 Expected: PASS (seluruh test di `tests/h2-text-tool-calls.test.js` lulus 100%).
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```bash
 git add src/llm/openai.js src/agent/orchestrator.js src/tools/registry.js src/security/guard.js
@@ -751,7 +751,7 @@ git commit -m "feat(security): tag fallback tool calls and gate execution via HI
 - Modify: `docs/AUDIT-FINDINGS-2026-09-14.md`
 - Modify: `docs/ROADMAP.md`
 
-- [ ] **Step 1: Jalankan verifikasi test penuh dan linter**
+- [x] **Step 1: Jalankan verifikasi test penuh dan linter**
 
 Run: `node --test tests/h2-text-tool-calls.test.js tests/parse-text-tool-calls.test.js tests/step2-security.test.js tests/h1-command-jail.test.js`
 Expected: PASS.
@@ -759,12 +759,12 @@ Expected: PASS.
 Run: `npm run lint`
 Expected: Clean lint and formatting.
 
-- [ ] **Step 2: Update status di `docs/AUDIT-FINDINGS-2026-09-14.md` dan `docs/ROADMAP.md`**
+- [x] **Step 2: Update status di `docs/AUDIT-FINDINGS-2026-09-14.md` dan `docs/ROADMAP.md`**
 
 1. Di `docs/AUDIT-FINDINGS-2026-09-14.md`, beri status `[FIXED 2026-09-15]` pada `H-2`.
 2. Di `docs/ROADMAP.md`, tambahkan pencapaian penutupan H-2 di bagian security audit.
 
-- [ ] **Step 3: Commit Task 5**
+- [x] **Step 3: Commit Task 5**
 
 ```bash
 git add docs/AUDIT-FINDINGS-2026-09-14.md docs/ROADMAP.md
