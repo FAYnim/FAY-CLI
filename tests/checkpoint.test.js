@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import { DEFAULT_CHECKPOINTS_DIR_NAME, DEFAULT_CONFIG } from '../src/config/constants.js';
 import { ConfigManager } from '../src/config/manager.js';
 
@@ -276,5 +276,75 @@ describe('CheckpointManager Core', () => {
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
+  });
+});
+
+import { dispatchToolCall } from '../src/tools/registry.js';
+
+describe('Tool Dispatcher Checkpoint Integration', () => {
+  let tmpRoot;
+  let checkpointsDir;
+  let workspaceDir;
+  let mgr;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-ckpt-dispatch-'));
+    checkpointsDir = path.join(tmpRoot, 'checkpoints');
+    workspaceDir = path.join(tmpRoot, 'workspace');
+    fs.mkdirSync(checkpointsDir, { recursive: true });
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    mgr = new CheckpointManager({ checkpointsDir, baseDir: workspaceDir });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('captures checkpoint when write_file succeeds via dispatchToolCall', async () => {
+    const filePath = 'test-write.txt';
+    const absPath = path.join(workspaceDir, filePath);
+    fs.writeFileSync(absPath, 'initial text', 'utf8');
+
+    const result = await dispatchToolCall(
+      'write_file',
+      { filePath, content: 'updated text' },
+      {
+        baseDir: workspaceDir,
+        checkpointManager: mgr,
+        sessionId: 'sess-dispatch-1',
+      },
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(fs.readFileSync(absPath, 'utf8'), 'updated text');
+
+    const checkpoints = mgr.getCheckpoints('sess-dispatch-1');
+    assert.equal(checkpoints.length, 1);
+    assert.equal(checkpoints[0].relPath, filePath);
+
+    // Rollback via manager
+    const undoRes = await mgr.undo({ sessionId: 'sess-dispatch-1', baseDir: workspaceDir });
+    assert.equal(undoRes.success, true);
+    assert.equal(fs.readFileSync(absPath, 'utf8'), 'initial text');
+  });
+
+  it('does not commit checkpoint if tool throws or fails', async () => {
+    const filePath = 'test-patch-fail.txt';
+    const absPath = path.join(workspaceDir, filePath);
+    fs.writeFileSync(absPath, 'hello world', 'utf8');
+
+    const result = await dispatchToolCall(
+      'patch_file',
+      { filePath, searchString: 'nonexistent phrase', replaceString: 'replacement' },
+      {
+        baseDir: workspaceDir,
+        checkpointManager: mgr,
+        sessionId: 'sess-dispatch-fail',
+      },
+    );
+
+    assert.equal(result.error, true);
+    const checkpoints = mgr.getCheckpoints('sess-dispatch-fail');
+    assert.equal(checkpoints.length, 0);
   });
 });
