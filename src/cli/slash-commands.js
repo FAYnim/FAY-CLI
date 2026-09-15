@@ -54,6 +54,10 @@ export const SLASH_COMMANDS_HELP = [
     desc: 'Summarize older context now to free space (agent loop does it automatically at 92%)',
   },
   { cmd: '/thoughts', desc: 'Toggle display of LLM reasoning/thought steps (hidden by default)' },
+  {
+    cmd: '/undo [n]',
+    desc: 'Undo the last file edit (or n steps back) performed by the agent',
+  },
   { cmd: '/clear', desc: 'Clear the terminal screen' },
   { cmd: '/instructions', desc: 'Show project instruction files loaded into the system prompt' },
   { cmd: '/config', desc: 'Display active CLI configuration settings' },
@@ -798,6 +802,17 @@ export async function executeSlashCommand(input, context = {}) {
           `  New      : ${ansi.bold(ansi.yellow(newSession.id))}\n\n`,
       );
 
+      if (
+        orchestrator?.checkpointManager &&
+        typeof orchestrator.checkpointManager.pruneSessions === 'function'
+      ) {
+        try {
+          orchestrator.checkpointManager.pruneSessions();
+        } catch (_e) {
+          /* silent-ok: checkpoint pruning is best-effort */
+        }
+      }
+
       return {
         handled: true,
         action: 'new_session',
@@ -906,6 +921,67 @@ export async function executeSlashCommand(input, context = {}) {
       stream.write(renderMarkdown(instructionsText));
       stream.write('\n\n');
       return { handled: true, action: 'instructions' };
+    }
+
+    case 'undo': {
+      if (!orchestrator?.checkpointManager || !orchestrator?.session) {
+        stream.write(
+          `\n${ansi.yellow('⚠')} Checkpoint manager or active session not available.\n\n`,
+        );
+        return { handled: true, action: 'undo_error', error: true };
+      }
+
+      const sessId = orchestrator.session.id;
+      const ckptMgr = orchestrator.checkpointManager;
+
+      if (args[0]?.toLowerCase() === 'list') {
+        const checkpoints = ckptMgr.getCheckpoints(sessId);
+        if (!checkpoints.length) {
+          stream.write(`\n${ansi.dim('No file changes recorded in this session.')}\n\n`);
+          return { handled: true, action: 'undo_list', count: 0 };
+        }
+
+        const lines = checkpoints.map((cp, idx) => {
+          const actionType = cp.existedBefore ? ansi.cyan('edit') : ansi.green('created');
+          const sizeStr = cp.tooLarge
+            ? ansi.red('(> 1MB - skipped)')
+            : ansi.dim(`(${cp.size} bytes)`);
+          return `  ${idx + 1}. [${actionType}] ${ansi.white(cp.relPath)} via ${ansi.yellow(cp.tool)} ${sizeStr}`;
+        });
+
+        const box = renderBox(lines.join('\n'), {
+          title: `File Checkpoints (${checkpoints.length} in session)`,
+          borderColor: 'cyan',
+          borderStyle: 'round',
+          minWidth: 50,
+        });
+        stream.write(`\n${box}\n\n`);
+        return { handled: true, action: 'undo_list', count: checkpoints.length };
+      }
+
+      const steps = args[0] && /^\d+$/.test(args[0]) ? Number.parseInt(args[0], 10) : 1;
+      const undoResult = await ckptMgr.undo({
+        sessionId: sessId,
+        steps,
+        baseDir: orchestrator.workingDir,
+      });
+
+      if (!undoResult.success) {
+        stream.write(`\n${ansi.yellow('⚠')} ${undoResult.reason || 'Could not undo changes.'}\n\n`);
+        return { handled: true, action: 'undo_failed', error: true, message: undoResult.reason };
+      }
+
+      stream.write(`\n${ansi.green('✔')} ${ansi.bold('Undo successful:')}\n`);
+      for (const item of undoResult.restored) {
+        const label =
+          item.action === 'unlinked'
+            ? `${ansi.red('Deleted created file')} ${ansi.white(item.relPath)}`
+            : `${ansi.green('Restored')} ${ansi.white(item.relPath)} ${ansi.dim(`(reverted ${item.tool})`)}`;
+        stream.write(`  • ${label}\n`);
+      }
+      stream.write('\n');
+
+      return { handled: true, action: 'undo', restored: undoResult.restored };
     }
 
     default: {

@@ -360,3 +360,98 @@ describe('AgentOrchestrator Checkpoint Integration', () => {
     assert.ok(orchestrator.checkpointManager instanceof CheckpointManager);
   });
 });
+
+import { executeSlashCommand, SLASH_COMMANDS_HELP } from '../src/cli/slash-commands.js';
+import { listCommandNames } from '../src/cli/autocomplete.js';
+
+describe('/undo Slash Command', () => {
+  it('SLASH_COMMANDS_HELP includes /undo', () => {
+    const entry = SLASH_COMMANDS_HELP.find((c) => c.cmd.includes('/undo'));
+    assert.ok(entry, 'SLASH_COMMANDS_HELP should contain /undo');
+  });
+
+  it('autocomplete discovers "undo" command name', () => {
+    const commands = listCommandNames();
+    assert.ok(commands.includes('undo'), 'listCommandNames should include undo');
+  });
+
+  it('reverts file edit when /undo is executed', async () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-undo-repl-'));
+    try {
+      const workspaceDir = path.join(tmpRoot, 'workspace');
+      const checkpointsDir = path.join(tmpRoot, 'checkpoints');
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      fs.mkdirSync(checkpointsDir, { recursive: true });
+
+      const testFile = path.join(workspaceDir, 'script.js');
+      fs.writeFileSync(testFile, 'console.log("before");', 'utf8');
+
+      const mgr = new CheckpointManager({ checkpointsDir, baseDir: workspaceDir });
+      const sessionId = 'repl-session-1';
+
+      // Perform edit
+      const token = await mgr.createSnapshot({
+        sessionId,
+        toolName: 'write_file',
+        filePath: 'script.js',
+        baseDir: workspaceDir,
+      });
+      fs.writeFileSync(testFile, 'console.log("after");', 'utf8');
+      await mgr.commitSnapshot(sessionId, token);
+
+      let output = '';
+      const stream = {
+        write: (str) => {
+          output += str;
+        },
+      };
+
+      const orchestrator = {
+        session: { id: sessionId },
+        workingDir: workspaceDir,
+        checkpointManager: mgr,
+      };
+
+      const result = await executeSlashCommand('/undo', { orchestrator, stream });
+      assert.equal(result.handled, true);
+      assert.equal(result.action, 'undo');
+      assert.equal(fs.readFileSync(testFile, 'utf8'), 'console.log("before");');
+      assert.ok(output.includes('Restored') || output.includes('script.js'));
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('lists checkpoints when /undo list is called', async () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fay-undo-list-'));
+    try {
+      const workspaceDir = path.join(tmpRoot, 'workspace');
+      const checkpointsDir = path.join(tmpRoot, 'checkpoints');
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      fs.mkdirSync(checkpointsDir, { recursive: true });
+
+      const mgr = new CheckpointManager({ checkpointsDir, baseDir: workspaceDir });
+      const sessionId = 'repl-session-list';
+
+      let output = '';
+      const stream = {
+        write: (str) => {
+          output += str;
+        },
+      };
+
+      const orchestrator = {
+        session: { id: sessionId },
+        workingDir: workspaceDir,
+        checkpointManager: mgr,
+      };
+
+      const result = await executeSlashCommand('/undo list', { orchestrator, stream });
+      assert.equal(result.handled, true);
+      assert.equal(result.action, 'undo_list');
+      assert.ok(output.includes('No file changes recorded'));
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
