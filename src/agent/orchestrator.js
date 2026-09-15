@@ -5,12 +5,12 @@
  */
 
 import path from 'node:path';
+import { configManager } from '../config/manager.js';
 import { parseTextToolCalls } from '../llm/openai.js';
 import { createLlmClient } from '../llm/registry.js';
 import { SecurityGuard } from '../security/guard.js';
 import { dispatchToolCall, getToolDeclarations, READ_ONLY_TOOLS } from '../tools/registry.js';
 import { logger as defaultLogger } from '../utils/logger.js';
-import { configManager } from '../config/manager.js';
 import { findProjectRoot, loadInstructions } from '../utils/project.js';
 import { CheckpointManager } from './checkpoint.js';
 import { compactSession } from './compactor.js';
@@ -377,7 +377,9 @@ export class AgentOrchestrator {
         if (textCalls.length > 0) {
           functionCalls = textCalls.map((c) => ({ ...c, isFallback: true }));
           for (const tc of functionCalls) {
-            this.logger.info(`[Fallback Tool Call] Mendeteksi tool call dari respons teks: ${tc.name}`);
+            this.logger.info(
+              `[Fallback Tool Call] Mendeteksi tool call dari respons teks: ${tc.name}`,
+            );
           }
         }
       }

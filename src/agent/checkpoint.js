@@ -165,7 +165,7 @@ export class CheckpointManager {
    * @param {string} sessionId
    * @param {object} token
    */
-  async discardSnapshot(sessionId, token) {
+  async discardSnapshot(_sessionId, token) {
     if (!token || token.skipped) return;
 
     if (token.backupFullPath && fs.existsSync(token.backupFullPath)) {
@@ -284,7 +284,7 @@ export class CheckpointManager {
         /* silent-ok */
       }
     } else {
-      const newContent = remaining.map((r) => JSON.stringify(r)).join('\n') + '\n';
+      const newContent = `${remaining.map((r) => JSON.stringify(r)).join('\n')}\n`;
       fs.writeFileSync(indexPath, newContent, 'utf8');
     }
 

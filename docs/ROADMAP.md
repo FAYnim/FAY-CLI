@@ -10,7 +10,7 @@
 |---|-------|-----------|-----------|----------|
 | 1 | Auto-load project instructions (`FAY.md`/`AGENTS.md`) | 1 — tertinggi | Mudah | ~50 LOC |
 | 2 | Cost & token usage di status line | 2 | Mudah | ~80 LOC |
-| 3 | Checkpoint & `/undo` file edit | 3 | Sedang | ~200 LOC |
+| 3 | Checkpoint & `/undo` file edit | 3 | Sedang | ~200 LOC (done) |
 | 4 | Bersihkan silent `catch {}` | 4 | Mudah | ~40 titik |
 | 5 | Hooks lifecycle (`preToolUse`/`postToolUse`) | 5 | Sedang | ~150 LOC |
 | 6 | Image / multimodal input | 6 | Sedang–Sulit | ~250 LOC |
@@ -72,7 +72,7 @@ ke agent loop.
 
 ---
 
-## 3. Checkpoint & `/undo` File Edit — Prioritas 3 · Sedang
+## 3. Checkpoint & `/undo` File Edit — Prioritas 3 · Sedang (done)
 
 **Status saat ini.** `write_file` dan `patch_file` langsung overwrite. Guard
 (`src/security/guard.js:312`) sudah membaca `beforeContent` untuk diff preview —
