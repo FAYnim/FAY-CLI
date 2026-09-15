@@ -348,3 +348,15 @@ describe('Tool Dispatcher Checkpoint Integration', () => {
     assert.equal(checkpoints.length, 0);
   });
 });
+
+import { AgentOrchestrator } from '../src/agent/orchestrator.js';
+
+describe('AgentOrchestrator Checkpoint Integration', () => {
+  it('initializes checkpointManager on orchestrator instance', () => {
+    const orchestrator = new AgentOrchestrator({
+      autoApprove: true,
+      checkpointEnabled: true,
+    });
+    assert.ok(orchestrator.checkpointManager instanceof CheckpointManager);
+  });
+});
