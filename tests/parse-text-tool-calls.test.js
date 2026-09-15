@@ -42,21 +42,18 @@ describe('parseTextToolCalls', () => {
       ]);
     });
 
-    test('tool_call wrapping JSON yields whole-object call plus clean-arguments call', () => {
-      // Locked snapshot: the container pass adds the entire {name, arguments}
-      // object as args, then the tagged-JSON pass adds the clean call again.
+    test('tool_call wrapping JSON yields single clean call', () => {
       const text =
         '<tool_call>{"name": "read_file", "arguments": {"filePath": "src/index.js"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { filePath: 'src/index.js' } } },
         { name: 'read_file', args: { filePath: 'src/index.js' } },
       ]);
     });
 
-    test('plural container does not reach the tagged-JSON pass (single whole-object call)', () => {
+    test('plural container unwraps {name, arguments} cleanly', () => {
       const text = '<tool_calls>{"name": "read_file", "arguments": {"path": "a.txt"}}</tool_calls>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { path: 'a.txt' } } },
+        { name: 'read_file', args: { path: 'a.txt' } },
       ]);
     });
 
@@ -76,14 +73,10 @@ describe('parseTextToolCalls', () => {
       ]);
     });
 
-    test('arguments provided as JSON-encoded string yields whole-object call plus parsed call', () => {
+    test('arguments provided as JSON-encoded string yields single clean call', () => {
       const text =
         '<tool_call>{"name": "execute_command", "arguments": "{\\"command\\": \\"pwd\\"}"}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        {
-          name: 'execute_command',
-          args: { name: 'execute_command', arguments: '{"command": "pwd"}' },
-        },
         { name: 'execute_command', args: { command: 'pwd' } },
       ]);
     });
@@ -91,7 +84,6 @@ describe('parseTextToolCalls', () => {
     test('name resolved from "tool" key and args from "parameters" key', () => {
       const text = '<tool_call>{"tool": "list_dir", "parameters": {"dirPath": "/tmp"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'list_dir', args: { tool: 'list_dir', parameters: { dirPath: '/tmp' } } },
         { name: 'list_dir', args: { dirPath: '/tmp' } },
       ]);
     });
@@ -100,10 +92,6 @@ describe('parseTextToolCalls', () => {
       const text =
         '<tool_call>{"function": "patch_file", "arguments": {"searchString": "x", "replaceString": "y"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        {
-          name: 'patch_file',
-          args: { function: 'patch_file', arguments: { searchString: 'x', replaceString: 'y' } },
-        },
         { name: 'patch_file', args: { searchString: 'x', replaceString: 'y' } },
       ]);
     });
@@ -114,11 +102,9 @@ describe('parseTextToolCalls', () => {
       assert.deepEqual(parseTextToolCalls(text), []);
     });
 
-    test('JSON without a name key falls through to classification fallback', () => {
+    test('JSON without a name key yields no call (no standalone fallback)', () => {
       const text = '<tool_call>{"filePath": "orphan.txt", "content": "hi"}</tool_call>';
-      assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'write_file', args: { filePath: 'orphan.txt', content: 'hi' } },
-      ]);
+      assert.deepEqual(parseTextToolCalls(text), []);
     });
   });
 
@@ -211,18 +197,14 @@ describe('parseTextToolCalls', () => {
       assert.deepEqual(parseTextToolCalls(text), []);
     });
 
-    test('fence JSON without name key falls through to classification fallback', () => {
+    test('fence JSON without name key yields no call', () => {
       const text = '```json\n{"filePath": "x.txt", "content": "hi"}\n```';
-      assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'write_file', args: { filePath: 'x.txt', content: 'hi' } },
-      ]);
+      assert.deepEqual(parseTextToolCalls(text), []);
     });
 
-    test('fence JSON followed by trailing text inside the fence reaches the fallback', () => {
+    test('fence JSON with trailing text and no tool name yields no call', () => {
       const text = '```json\n{"command": "ls"} trailing text\n```';
-      assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'execute_command', args: { command: 'ls' } },
-      ]);
+      assert.deepEqual(parseTextToolCalls(text), []);
     });
   });
 
@@ -276,51 +258,29 @@ describe('parseTextToolCalls', () => {
     });
   });
 
-  describe('pattern: standalone JSON classification fallback', () => {
-    test('{filePath, content} classified as write_file', () => {
-      assert.deepEqual(parseTextToolCalls('{"filePath": "c.txt", "content": "hi"}'), [
-        { name: 'write_file', args: { filePath: 'c.txt', content: 'hi' } },
-      ]);
+  describe('security H-2: standalone JSON without tool name is strictly ignored', () => {
+    test('{filePath, content} returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"filePath": "c.txt", "content": "hi"}'), []);
     });
 
-    test('{content} alone classified as write_file', () => {
-      assert.deepEqual(parseTextToolCalls('{"content": "just data"}'), [
-        { name: 'write_file', args: { content: 'just data' } },
-      ]);
+    test('{content} alone returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"content": "just data"}'), []);
     });
 
-    test('{searchString, replaceString} classified as patch_file', () => {
-      assert.deepEqual(parseTextToolCalls('{"searchString": "a", "replaceString": "b"}'), [
-        { name: 'patch_file', args: { searchString: 'a', replaceString: 'b' } },
-      ]);
+    test('{searchString, replaceString} returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"searchString": "a", "replaceString": "b"}'), []);
     });
 
-    test('{command} classified as execute_command', () => {
-      assert.deepEqual(parseTextToolCalls('{"command": "ls"}'), [
-        { name: 'execute_command', args: { command: 'ls' } },
-      ]);
+    test('{command} returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"command": "ls"}'), []);
     });
 
-    test('{dirPath, depth} classified as list_dir', () => {
-      assert.deepEqual(parseTextToolCalls('{"dirPath": "/sdcard", "depth": 1}'), [
-        { name: 'list_dir', args: { dirPath: '/sdcard', depth: 1 } },
-      ]);
+    test('{dirPath, depth} returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"dirPath": "/sdcard", "depth": 1}'), []);
     });
 
-    test('{filePath} alone classified as read_file', () => {
-      assert.deepEqual(parseTextToolCalls('{"filePath": "x.txt"}'), [
-        { name: 'read_file', args: { filePath: 'x.txt' } },
-      ]);
-    });
-
-    test('fallback is skipped when a structured call was already found', () => {
-      const text =
-        '<tool_call>{"name": "read_file", "arguments": {"filePath": "a.txt"}}</tool_call>\n' +
-        'Also consider: {"command": "ls"}';
-      assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { filePath: 'a.txt' } } },
-        { name: 'read_file', args: { filePath: 'a.txt' } },
-      ]);
+    test('{filePath} alone returns []', () => {
+      assert.deepEqual(parseTextToolCalls('{"filePath": "x.txt"}'), []);
     });
 
     test('JSON with no characteristic parameters is ignored', () => {
@@ -334,7 +294,6 @@ describe('parseTextToolCalls', () => {
         '<think>I could use write_file here {"filePath": "draft.txt", "content": "x"}</think>' +
         '<tool_call>{"name": "read_file", "arguments": {"filePath": "a.txt"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { filePath: 'a.txt' } } },
         { name: 'read_file', args: { filePath: 'a.txt' } },
       ]);
     });
@@ -348,16 +307,11 @@ describe('parseTextToolCalls', () => {
   });
 
   describe('multiple calls, ordering and deduplication', () => {
-    test('two tool_call blocks: container-pass calls first, then tagged-JSON calls', () => {
+    test('two tool_call blocks are parsed cleanly in order without duplicates', () => {
       const text =
         '<tool_call>{"name": "read_file", "arguments": {"filePath": "a.txt"}}</tool_call>\n' +
         '<tool_call>{"name": "execute_command", "arguments": {"command": "ls"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { filePath: 'a.txt' } } },
-        {
-          name: 'execute_command',
-          args: { name: 'execute_command', arguments: { command: 'ls' } },
-        },
         { name: 'read_file', args: { filePath: 'a.txt' } },
         { name: 'execute_command', args: { command: 'ls' } },
       ]);
@@ -373,12 +327,11 @@ describe('parseTextToolCalls', () => {
       ]);
     });
 
-    test('identical duplicate tagged blocks collapse to one call per shape', () => {
+    test('identical duplicate tagged blocks collapse to one call', () => {
       const text =
         '<tool_call>{"name": "read_file", "arguments": {"filePath": "a.txt"}}</tool_call>\n' +
         '<tool_call>{"name": "read_file", "arguments": {"filePath": "a.txt"}}</tool_call>';
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'read_file', args: { name: 'read_file', arguments: { filePath: 'a.txt' } } },
         { name: 'read_file', args: { filePath: 'a.txt' } },
       ]);
     });
@@ -405,7 +358,6 @@ describe('parseTextToolCalls', () => {
         '<tool_call>{"name": "list_dir", "arguments": {"dirPath": ".", "depth": 1}}</tool_call>',
       ].join('\n');
       assert.deepEqual(parseTextToolCalls(text), [
-        { name: 'list_dir', args: { name: 'list_dir', arguments: { dirPath: '.', depth: 1 } } },
         { name: 'list_dir', args: { dirPath: '.', depth: 1 } },
       ]);
     });

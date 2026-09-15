@@ -567,15 +567,23 @@ function extractParamTagArgs(block, tagPattern, { exclude = [] } = {}) {
  */
 const BLOCK_EXTRACTORS = [
   {
-    // <tool_calls>...</tool_calls> containers: the tool is named inside the
-    // block and the arguments are the first-to-last JSON object in it.
-    pattern: /<tool_calls?>([\s\S]*?)<\/tool_calls?>/gi,
+    // <tool_calls>...</tool_calls> plural containers: the tool is named inside the
+    // container block and arguments are parsed from the payload.
+    // (Singular <tool_call> blocks are handled by the dedicated passes below).
+    pattern: /<tool_calls>([\s\S]*?)<\/tool_calls>/gi,
     interpret(match, addCall) {
       const block = match[1];
       const nameMatch = block.match(TEXT_TOOL_NAME_PATTERN);
       if (!nameMatch) return;
-      const args = extractJsonLoose(block);
-      if (args) addCall(nameMatch[1], args);
+      const parsed = extractJsonLoose(block);
+      if (!parsed) return;
+      // If the parsed JSON already encapsulates { name, arguments }, unwrap it cleanly
+      const unwrapped = resolveJsonCall(parsed, TAGGED_JSON_SHAPE);
+      if (unwrapped) {
+        addCall(unwrapped.name, unwrapped.args);
+      } else {
+        addCall(nameMatch[1], parsed);
+      }
     },
   },
   {
@@ -645,10 +653,15 @@ function extractActionLineCall(text, addCall) {
   }
 }
 
-/** Extracts a bare tool name directly followed by a JSON object. */
+/**
+ * Extracts a bare tool name followed by a JSON object.
+ * Strictly requires the tool name to be at the start of a line (or immediately
+ * following an opening <tool_call> tag) with a valid delimiter (: | <tool_sep> | \n | whitespace),
+ * preventing false-positive execution from tool names mentioned in prose mid-sentence.
+ */
 function extractInlineNameCalls(text, addCall) {
   const inlinePattern = new RegExp(
-    `(?:^|\\n|\\s|<tool_call>)(${TEXT_TOOL_NAMES_SOURCE})[^\\w{]*(\\{[\\s\\S]*?\\})`,
+    `(?:^|\\n|<tool_call>)\\s*(${TEXT_TOOL_NAMES_SOURCE})(?:\\s*:\\s*|\\s*<tool_sep>\\s*|\\s*\\n\\s*|\\s+)(\\{[\\s\\S]*?\\})`,
     'gi',
   );
   for (const match of text.matchAll(inlinePattern)) {
@@ -656,29 +669,6 @@ function extractInlineNameCalls(text, addCall) {
       addCall(match[1], JSON.parse(match[2]));
     } catch (err) {
       logger.debug('openai.parseTextToolCalls: inline-name args failed', err);
-    }
-  }
-}
-
-/** Classifies a standalone JSON object by its characteristic parameters. */
-function classifyStandaloneJson(text, addCall) {
-  for (const match of text.matchAll(/\{[\s\S]*?\}/g)) {
-    try {
-      const obj = JSON.parse(match[0]);
-      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) continue;
-      if (obj.content !== undefined || (obj.filePath && obj.content) || (obj.path && obj.content)) {
-        addCall('write_file', obj);
-      } else if (obj.searchString || obj.replaceString || obj.search || obj.replace) {
-        addCall('patch_file', obj);
-      } else if (obj.command || obj.cmd) {
-        addCall('execute_command', obj);
-      } else if (obj.dirPath || obj.depth) {
-        addCall('list_dir', obj);
-      } else if (obj.filePath || obj.path) {
-        addCall('read_file', obj);
-      }
-    } catch {
-      /* silent-ok: not every curly-brace substring in model text is JSON */
     }
   }
 }
@@ -693,10 +683,9 @@ function classifyStandaloneJson(text, addCall) {
  *   2. scan for every known block construct (tagged containers, underscore XML
  *      blocks, <function=…> blocks, tagged JSON, fenced JSON), in order
  *   3. scan for ReAct `Action:` lines, then bare `tool_name {…}` pairs
- *   4. when nothing matched, classify standalone JSON objects by their
- *      characteristic parameters
  * Every candidate is validated against the known tool names and deduplicated
- * in a single place.
+ * in a single place. Standalone JSON without an explicit tool name is never
+ * executed (audit H-2).
  *
  * @param {string} rawText
  * @returns {Array<{ name: string, args: object }>}
@@ -724,8 +713,5 @@ export function parseTextToolCalls(rawText) {
   }
   extractActionLineCall(text, addCall);
   extractInlineNameCalls(text, addCall);
-  if (calls.length === 0) {
-    classifyStandaloneJson(text, addCall);
-  }
   return calls;
 }
