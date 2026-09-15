@@ -357,7 +357,10 @@ export class AgentOrchestrator {
       if (!functionCalls || functionCalls.length === 0) {
         const textCalls = parseTextToolCalls(text);
         if (textCalls.length > 0) {
-          functionCalls = textCalls;
+          functionCalls = textCalls.map((c) => ({ ...c, isFallback: true }));
+          for (const tc of functionCalls) {
+            this.logger.info(`[Fallback Tool Call] Mendeteksi tool call dari respons teks: ${tc.name}`);
+          }
         }
       }
 
@@ -407,6 +410,7 @@ export class AgentOrchestrator {
           baseDir: this.workingDir,
           logger: this.logger,
           signal,
+          isFallback: Boolean(fc.isFallback),
         });
 
         let responsePayload;

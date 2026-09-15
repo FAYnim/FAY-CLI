@@ -432,7 +432,9 @@ export async function dispatchToolCall(name, rawArgs = {}, context = {}) {
   // Authorize via SecurityGuard if present in context
   if (context.securityGuard && typeof context.securityGuard.authorize === 'function') {
     try {
-      const auth = await context.securityGuard.authorize(name, args);
+      const auth = await context.securityGuard.authorize(name, args, {
+        isFallback: Boolean(context.isFallback),
+      });
       if (!auth.allowed) {
         return {
           error: true,

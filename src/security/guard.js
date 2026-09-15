@@ -212,9 +212,10 @@ export class SecurityGuard {
    *
    * @param {string} toolName
    * @param {object} args
+   * @param {object} [meta={}] - Execution metadata (e.g. { isFallback: boolean })
    * @returns {Promise<{ allowed: boolean, reason?: string, resolvedPath?: string }>}
    */
-  async authorize(toolName, args = {}) {
+  async authorize(toolName, args = {}, meta = {}) {
     if (this.mode === 'plan') {
       if (toolName === 'execute_command' || toolName === 'patch_file') {
         return {
@@ -273,16 +274,24 @@ export class SecurityGuard {
         // H-1: paths appearing inside the command text must respect the jail
         // too — validateSafePath was only ever applied to `workingDir`.
         const outsidePaths = findPathsOutsideJail(command, this.baseDir, this._pathOptions());
-        const needsPrompt = inspection.isRisky || outsidePaths.length > 0;
+        const isFallback = Boolean(meta.isFallback);
+        const needsPrompt = inspection.isRisky || outsidePaths.length > 0 || isFallback;
 
         if (needsPrompt && !this.autoApprove) {
           const outsideList = outsidePaths.map((p) => `- ${p.raw}`).join('\n');
-          const description = outsidePaths.length
-            ? 'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:'
-            : 'AI ingin menjalankan perintah shell yang mungkin berisiko:';
+          let description = 'AI ingin menjalankan perintah shell yang mungkin berisiko:';
+          if (outsidePaths.length > 0) {
+            description = 'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:';
+          } else if (isFallback) {
+            description = 'AI mengusulkan perintah shell dari teks respons (fallback parser):';
+          }
+
           const target = outsidePaths.length
             ? `${command}\n\nPath di luar workspace:\n${outsideList}`
-            : command;
+            : isFallback
+              ? `${command}\n\n[Catatan: Perintah ini diekstrak dari teks model, bukan native function call]`
+              : command;
+
           const confirmed = await this.promptConfirmation({
             description,
             target,
@@ -293,7 +302,9 @@ export class SecurityGuard {
               allowed: false,
               reason: outsidePaths.length
                 ? `User denied execution: command touches paths outside workspace ("${outsidePaths[0].raw}").`
-                : `User denied execution of risky command: "${command}".`,
+                : isFallback
+                  ? `User denied execution of fallback command: "${command}".`
+                  : `User denied execution of risky command: "${command}".`,
             };
           }
         }

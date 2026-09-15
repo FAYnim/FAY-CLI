@@ -342,8 +342,9 @@ export class OpenAIClient extends BaseLlmClient {
       const rawText = tokens.join('');
       const fallbackCalls = parseTextToolCalls(rawText);
       if (fallbackCalls.length > 0) {
-        functionCalls.push(...fallbackCalls);
-        for (const fc of fallbackCalls) {
+        const taggedFallback = fallbackCalls.map((fc) => ({ ...fc, isFallback: true }));
+        functionCalls.push(...taggedFallback);
+        for (const fc of taggedFallback) {
           if (typeof options.onFunctionCall === 'function') {
             options.onFunctionCall(fc);
           }
@@ -452,7 +453,7 @@ export class OpenAIClient extends BaseLlmClient {
     if (functionCalls.length === 0 && text) {
       const fallbackCalls = parseTextToolCalls(text);
       if (fallbackCalls.length > 0) {
-        functionCalls.push(...fallbackCalls);
+        functionCalls.push(...fallbackCalls.map((fc) => ({ ...fc, isFallback: true })));
       }
     }
 
