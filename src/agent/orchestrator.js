@@ -5,13 +5,14 @@
  */
 
 import path from 'node:path';
+import { configManager } from '../config/manager.js';
 import { parseTextToolCalls } from '../llm/openai.js';
 import { createLlmClient } from '../llm/registry.js';
 import { SecurityGuard } from '../security/guard.js';
 import { dispatchToolCall, getToolDeclarations, READ_ONLY_TOOLS } from '../tools/registry.js';
 import { logger as defaultLogger } from '../utils/logger.js';
-import { configManager } from '../config/manager.js';
 import { findProjectRoot, loadInstructions } from '../utils/project.js';
+import { CheckpointManager } from './checkpoint.js';
 import { compactSession } from './compactor.js';
 import { pruneMessages } from './pruner.js';
 import { ReflectionChecker } from './reflection.js';
@@ -111,6 +112,23 @@ export class AgentOrchestrator {
       this.customInstructions = text || null;
       this.instructionFiles = files || [];
     }
+
+    // Checkpoint Manager for file rollback
+    const ckptConfig = configManager?.get ? configManager.get('checkpoint') || {} : {};
+    this.checkpointManager =
+      options.checkpointManager ||
+      new CheckpointManager({
+        checkpointsDir:
+          options.checkpointsDir ||
+          (configManager?.getCheckpointsDir
+            ? configManager.getCheckpointsDir()
+            : path.join(process.cwd(), '.faycli', 'checkpoints')),
+        baseDir: this.workingDir,
+        enabled: options.checkpointEnabled ?? ckptConfig.enabled ?? true,
+        keep: options.checkpointKeep ?? ckptConfig.keep ?? 10,
+        maxFileSize: options.checkpointMaxFileSize ?? ckptConfig.maxFileSize ?? 1048576,
+        logger: this.logger,
+      });
 
     // Tools
     this.tools = options.tools || getToolDeclarations();
@@ -359,7 +377,9 @@ export class AgentOrchestrator {
         if (textCalls.length > 0) {
           functionCalls = textCalls.map((c) => ({ ...c, isFallback: true }));
           for (const tc of functionCalls) {
-            this.logger.info(`[Fallback Tool Call] Mendeteksi tool call dari respons teks: ${tc.name}`);
+            this.logger.info(
+              `[Fallback Tool Call] Mendeteksi tool call dari respons teks: ${tc.name}`,
+            );
           }
         }
       }
@@ -407,6 +427,8 @@ export class AgentOrchestrator {
         // Dispatch actuator tool with security authorization
         const toolExecution = await dispatchToolCall(name, args, {
           securityGuard: this.securityGuard,
+          checkpointManager: this.checkpointManager,
+          sessionId: this.session?.id,
           baseDir: this.workingDir,
           logger: this.logger,
           signal,

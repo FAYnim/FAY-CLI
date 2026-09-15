@@ -449,13 +449,59 @@ export async function dispatchToolCall(name, rawArgs = {}, context = {}) {
     }
   }
 
+  const isModifyingTool = name === 'write_file' || name === 'patch_file';
+  let snapshotToken = null;
+
+  if (
+    isModifyingTool &&
+    context.checkpointManager &&
+    context.sessionId &&
+    typeof context.checkpointManager.createSnapshot === 'function'
+  ) {
+    try {
+      snapshotToken = await context.checkpointManager.createSnapshot({
+        sessionId: context.sessionId,
+        toolName: name,
+        filePath: args.filePath,
+        baseDir: context.baseDir,
+      });
+    } catch (_snapErr) {
+      /* silent-ok: snapshot failure should not prevent tool execution */
+    }
+  }
+
   try {
     const result = await tool(args, context);
+
+    if (
+      snapshotToken &&
+      context.checkpointManager &&
+      typeof context.checkpointManager.commitSnapshot === 'function'
+    ) {
+      try {
+        await context.checkpointManager.commitSnapshot(context.sessionId, snapshotToken);
+      } catch (_e) {
+        /* silent-ok: commit logging failure is non-fatal */
+      }
+    }
+
     return {
       success: true,
       result,
     };
   } catch (err) {
+    if (
+      snapshotToken &&
+      context.checkpointManager &&
+      typeof context.checkpointManager.discardSnapshot === 'function'
+    ) {
+      try {
+        await context.checkpointManager.discardSnapshot(context.sessionId, snapshotToken);
+      } catch (_e) {
+        /* silent-ok: discard cleanup is best-effort */
+      }
+    }
+
     return {
       error: true,
       message: err.message || String(err),

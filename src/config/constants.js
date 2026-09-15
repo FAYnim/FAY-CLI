@@ -23,6 +23,7 @@ export const APP_DESCRIPTION = 'Autonomous AI Agent CLI optimized for Termux And
 export const DEFAULT_CONFIG_DIR_NAME = '.faycli';
 export const DEFAULT_CONFIG_FILE_NAME = 'config.json';
 export const DEFAULT_SESSIONS_DIR_NAME = 'sessions';
+export const DEFAULT_CHECKPOINTS_DIR_NAME = 'checkpoints';
 
 // Fallback Termux home directory if os.homedir() returns empty or unusual root
 export const TERMUX_HOME_FALLBACK = '/data/data/com.termux/files/home';
@@ -98,4 +99,9 @@ export const DEFAULT_CONFIG = {
   verbose: false,
   locale: 'en',
   instructionsFile: 'AGENTS.md',
+  checkpoint: {
+    enabled: true,
+    keep: 10,
+    maxFileSize: 1048576, // 1 MB cap
+  },
 };
