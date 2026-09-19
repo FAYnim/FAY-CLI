@@ -4,6 +4,7 @@
  */
 
 import os from 'node:os';
+import { discoverSkills } from '../skills/skill-manager.js';
 import { findProjectRoot } from '../utils/project.js';
 
 /**
@@ -214,6 +215,40 @@ Follow this sequential loop for every planning request:
 }
 
 /**
+ * Builds the compact available skills instruction block for system prompt.
+ *
+ * @param {object} [options={}]
+ * @returns {string|null}
+ */
+export function buildSkillsInstructionBlock(options = {}) {
+  if (options.enableSkills === false) return null;
+
+  try {
+    const skills = discoverSkills({
+      projectRoot: options.projectRoot || options.workingDir,
+      homeDir: options.homeDir,
+    });
+
+    if (!skills || skills.length === 0) return null;
+
+    const lines = [
+      '### AVAILABLE SKILLS:',
+      'The following skills are installed and provide specialized workflows or guidelines.',
+      'When the user request matches a skill description, invoke the `load_skill` tool with the skill name to read its full instructions before proceeding.',
+      '',
+    ];
+
+    for (const s of skills) {
+      lines.push(`- **${s.name}** (${s.scope}): ${s.description}`);
+    }
+
+    return lines.join('\n');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Builds the complete system instruction string for the LLM
  *
  * @param {object} [options={}]
@@ -256,6 +291,12 @@ export function buildSystemPrompt(options = {}) {
     `- **Current Timestamp**: ${envInfo.datetime} (${envInfo.timezone})`,
   );
   parts.push(envLines.join('\n'));
+
+  // Available skills catalog if present
+  const skillsBlock = buildSkillsInstructionBlock(options);
+  if (skillsBlock) {
+    parts.push(skillsBlock);
+  }
 
   // Custom user / project instructions if provided
   if (options.customInstructions && typeof options.customInstructions === 'string') {
