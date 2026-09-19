@@ -14,7 +14,6 @@ import path from 'node:path';
 import { searchWorkspaceFiles } from '../utils/file-index.js';
 import { SLASH_COMMANDS_HELP } from './slash-commands.js';
 
-
 /** Directory entries never offered as suggestions. Dotfiles are skipped separately. */
 const SKIP_DIRS = new Set(['node_modules', '.git']);
 
@@ -163,4 +162,3 @@ export function getSuggestions(text, cursor, ctx = {}) {
 
   return { kind: 'file', items, replaceStart: start, replaceEnd: end, dir: dirPart };
 }
-

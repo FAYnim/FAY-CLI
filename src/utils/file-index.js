@@ -167,7 +167,6 @@ export function searchWorkspaceFiles(query, workingDir = process.cwd(), options 
     // Full relative path contains query
     if (lowerFile.includes(q)) {
       scored.push({ file, score: 20 });
-      continue;
     }
   }
 

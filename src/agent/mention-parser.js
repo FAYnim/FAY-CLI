@@ -10,7 +10,7 @@ export const DEFAULT_MAX_FILE_SIZE = 50 * 1024; // 50 KB
 export const DEFAULT_MAX_FILES = 5;
 
 // Regex matching @path/file preceded by start of string or whitespace
-const MENTION_REGEX = /(?:^|\s)@([a-zA-Z0-9_\-\.\/]+)/g;
+const MENTION_REGEX = /(?:^|\s)@([a-zA-Z0-9_\-./]+)/g;
 
 /**
  * Check if a buffer contains binary data (contains null bytes)
@@ -35,13 +35,14 @@ function isBinaryBuffer(buffer) {
 export function parseMentions(text) {
   if (typeof text !== 'string') return [];
   const matches = new Set();
-  let m;
   MENTION_REGEX.lastIndex = 0;
-  while ((m = MENTION_REGEX.exec(text)) !== null) {
+  let m = MENTION_REGEX.exec(text);
+  while (m !== null) {
     const fileToken = m[1].replace(/^\/+|\/+$/g, '');
     if (fileToken && !fileToken.endsWith('@')) {
       matches.add(fileToken);
     }
+    m = MENTION_REGEX.exec(text);
   }
   return [...matches];
 }
@@ -98,7 +99,9 @@ export function expandMentions(text, options = {}) {
       const posixPath = relPath.split(path.sep).join('/');
 
       if (isBinaryBuffer(buffer)) {
-        contextBlocks.push(`<context_file path="${posixPath}">\n[Binary file omitted]\n</context_file>`);
+        contextBlocks.push(
+          `<context_file path="${posixPath}">\n[Binary file omitted]\n</context_file>`,
+        );
         attachedFiles.push(posixPath);
         continue;
       }
@@ -109,7 +112,9 @@ export function expandMentions(text, options = {}) {
           `<context_file path="${posixPath}">\n${truncated}\n\n[... content truncated: exceeds 50KB limit]\n</context_file>`,
         );
       } else {
-        contextBlocks.push(`<context_file path="${posixPath}">\n${buffer.toString('utf-8')}\n</context_file>`);
+        contextBlocks.push(
+          `<context_file path="${posixPath}">\n${buffer.toString('utf-8')}\n</context_file>`,
+        );
       }
       attachedFiles.push(posixPath);
     } catch {

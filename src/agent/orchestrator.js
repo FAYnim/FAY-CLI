@@ -315,7 +315,6 @@ export class AgentOrchestrator {
       this.session.addUserMessage(displayText);
     }
 
-
     while (currentIteration < maxIters) {
       if (signal?.aborted) {
         throw signal.reason || new Error('ReAct loop was aborted');
@@ -388,7 +387,6 @@ export class AgentOrchestrator {
           }
         }
       }
-
 
       // Step 1.5: Snapshot the estimator baseline for real-usage anchoring
       markRequestStart(this.session);

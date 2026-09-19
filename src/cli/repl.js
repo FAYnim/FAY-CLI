@@ -3,14 +3,13 @@
  * Multi-turn terminal interface with slash commands and SIGINT handling.
  */
 
-import { AgentOrchestrator, createAgentOrchestrator } from '../agent/orchestrator.js';
 import { expandMentions } from '../agent/mention-parser.js';
-import { McpManager } from '../mcp/manager.js';
-
+import { AgentOrchestrator, createAgentOrchestrator } from '../agent/orchestrator.js';
 import { contextBudgetLimit, getContextTokens, getUsage } from '../agent/usage.js';
 import { APP_NAME } from '../config/constants.js';
 import { ConfigManager } from '../config/manager.js';
 import { loadLocale, t } from '../i18n/index.js';
+import { McpManager } from '../mcp/manager.js';
 import { SecurityGuard } from '../security/guard.js';
 import { renderBanner, renderStatusLine } from '../ui/box.js';
 import { buildPrompt } from '../ui/history-indicator.js';
