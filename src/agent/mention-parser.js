@@ -5,12 +5,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadSkillContent } from '../skills/skill-manager.js';
 
 export const DEFAULT_MAX_FILE_SIZE = 50 * 1024; // 50 KB
 export const DEFAULT_MAX_FILES = 5;
 
-// Regex matching @path/file preceded by start of string or whitespace
-const MENTION_REGEX = /(?:^|\s)@([a-zA-Z0-9_\-./]+)/g;
+// Regex matching @path/file or @skill:name preceded by start of string or whitespace
+const MENTION_REGEX = /(?:^|\s)@([a-zA-Z0-9_\-./:]+)/g;
 
 /**
  * Check if a buffer contains binary data (contains null bytes)
@@ -38,9 +39,9 @@ export function parseMentions(text) {
   MENTION_REGEX.lastIndex = 0;
   let m = MENTION_REGEX.exec(text);
   while (m !== null) {
-    const fileToken = m[1].replace(/^\/+|\/+$/g, '');
-    if (fileToken && !fileToken.endsWith('@')) {
-      matches.add(fileToken);
+    const token = m[1].replace(/^\/+|\/+$/g, '');
+    if (token && !token.endsWith('@')) {
+      matches.add(token);
     }
     m = MENTION_REGEX.exec(text);
   }
@@ -48,35 +49,55 @@ export function parseMentions(text) {
 }
 
 /**
- * Expand @file mentions by reading target files and appending <context_file> blocks
+ * Expand @file and @skill: mentions by reading target files/skills and appending context blocks
  *
  * @param {string} text - Original user prompt
  * @param {object} [options={}]
  * @param {string} [options.workingDir=process.cwd()]
+ * @param {string} [options.projectRoot]
+ * @param {string} [options.homeDir]
  * @param {number} [options.maxFileSizeBytes=DEFAULT_MAX_FILE_SIZE]
  * @param {number} [options.maxFiles=DEFAULT_MAX_FILES]
- * @returns {{ cleanPrompt: string, injectedPrompt: string, attachedFiles: string[] }}
+ * @returns {{ cleanPrompt: string, injectedPrompt: string, attachedFiles: string[], attachedSkills: string[] }}
  */
 export function expandMentions(text, options = {}) {
   const cleanPrompt = text || '';
   if (!cleanPrompt.trim()) {
-    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [], attachedSkills: [] };
   }
 
   const workingDir = options.workingDir || process.cwd();
+  const projectRoot = options.projectRoot || workingDir;
+  const homeDir = options.homeDir;
   const maxSizeBytes = options.maxFileSizeBytes || DEFAULT_MAX_FILE_SIZE;
   const maxFiles = options.maxFiles || DEFAULT_MAX_FILES;
 
   const rawMentions = parseMentions(cleanPrompt);
   if (rawMentions.length === 0) {
-    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [], attachedSkills: [] };
   }
 
   const attachedFiles = [];
+  const attachedSkills = [];
   const contextBlocks = [];
 
   for (const relPath of rawMentions) {
-    if (attachedFiles.length >= maxFiles) break;
+    // Handle @skill:<name>
+    if (relPath.startsWith('skill:')) {
+      const skillName = relPath.slice(6).trim();
+      if (skillName) {
+        const skillObj = loadSkillContent(skillName, { projectRoot, homeDir });
+        if (skillObj && skillObj.content) {
+          contextBlocks.push(
+            `<context_skill name="${skillName}">\n${skillObj.content}\n</context_skill>`,
+          );
+          attachedSkills.push(skillName);
+        }
+      }
+      continue;
+    }
+
+    if (attachedFiles.length >= maxFiles) continue;
 
     const fullPath = path.resolve(workingDir, relPath);
 
@@ -123,9 +144,9 @@ export function expandMentions(text, options = {}) {
   }
 
   if (contextBlocks.length === 0) {
-    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [], attachedSkills: [] };
   }
 
   const injectedPrompt = `${cleanPrompt}\n\n${contextBlocks.join('\n\n')}`;
-  return { cleanPrompt, injectedPrompt, attachedFiles };
+  return { cleanPrompt, injectedPrompt, attachedFiles, attachedSkills };
 }
