@@ -3,12 +3,13 @@
  * Multi-turn terminal interface with slash commands and SIGINT handling.
  */
 
+import { expandMentions } from '../agent/mention-parser.js';
 import { AgentOrchestrator, createAgentOrchestrator } from '../agent/orchestrator.js';
-import { McpManager } from '../mcp/manager.js';
 import { contextBudgetLimit, getContextTokens, getUsage } from '../agent/usage.js';
 import { APP_NAME } from '../config/constants.js';
 import { ConfigManager } from '../config/manager.js';
 import { loadLocale, t } from '../i18n/index.js';
+import { McpManager } from '../mcp/manager.js';
 import { SecurityGuard } from '../security/guard.js';
 import { renderBanner, renderStatusLine } from '../ui/box.js';
 import { buildPrompt } from '../ui/history-indicator.js';
@@ -286,6 +287,17 @@ export async function startRepl(options = {}) {
       continue;
     }
 
+    // Expand @file mentions and prepare clean vs injected prompt
+    const { cleanPrompt, injectedPrompt, attachedFiles } = expandMentions(line, {
+      workingDir: orchestrator.workingDir,
+    });
+
+    if (attachedFiles.length > 0) {
+      output.write(
+        `${ansi.cyan('📎')} ${ansi.dim(`Attached ${attachedFiles.length} file(s):`)} ${ansi.cyan(attachedFiles.join(', '))}\n`,
+      );
+    }
+
     // Process Agent Turn
     isBusy = true;
     activeAbortController = new AbortController();
@@ -298,8 +310,10 @@ export async function startRepl(options = {}) {
       const providerName = orchestrator.provider ? orchestrator.provider.toUpperCase() : 'LLM';
       spinner.start(t('contactingApi', { provider: providerName }));
 
-      const result = await orchestrator.runTurn(line, {
+      const result = await orchestrator.runTurn(injectedPrompt, {
+        displayPrompt: cleanPrompt,
         signal: activeAbortController.signal,
+
         onIterationStart: (iter) => {
           lastIterations = iter;
           if (iter > 1) {
