@@ -2,8 +2,9 @@
  * OpenAI-compatible Chat Completions adapter.
  * Translates Gemini request shape -> OpenAI, parses SSE stream back into Gemini-compatible result.
  */
-import { BaseLlmClient } from './base.js';
+
 import { logger } from '../utils/logger.js';
+import { BaseLlmClient } from './base.js';
 
 /**
  * Recursively converts Gemini UPPERCASE schema types to standard lowercase JSON Schema types.
@@ -476,6 +477,7 @@ const TEXT_TOOL_NAMES = [
   'write_file',
   'patch_file',
   'list_dir',
+  'load_skill',
   'execute_command',
   'grep_file',
   'search_files',

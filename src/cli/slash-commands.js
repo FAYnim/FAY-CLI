@@ -1055,7 +1055,8 @@ export async function executeSlashCommand(input, context = {}) {
         }
 
         const lines = skills.map((s) => {
-          const scopeLabel = s.scope === 'project' ? ansi.green('[project]') : ansi.blue('[global]');
+          const scopeLabel =
+            s.scope === 'project' ? ansi.green('[project]') : ansi.blue('[global]');
           return `${scopeLabel} ${ansi.bold(ansi.cyan(s.name))} ${ansi.dim(`v${s.version}`)} by ${s.author}\n  ${ansi.dim(s.description)}`;
         });
 

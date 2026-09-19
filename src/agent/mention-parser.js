@@ -87,7 +87,7 @@ export function expandMentions(text, options = {}) {
       const skillName = relPath.slice(6).trim();
       if (skillName) {
         const skillObj = loadSkillContent(skillName, { projectRoot, homeDir });
-        if (skillObj && skillObj.content) {
+        if (skillObj?.content) {
           contextBlocks.push(
             `<context_skill name="${skillName}">\n${skillObj.content}\n</context_skill>`,
           );

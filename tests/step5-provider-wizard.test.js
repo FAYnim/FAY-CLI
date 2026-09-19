@@ -64,19 +64,19 @@ class AnswerStream extends Readable {
     super({ encoding: 'utf8' });
     this._answers = answers;
     this._i = 0;
-    this._closed = false;
+    this._reading = false;
   }
   _read() {
-    if (this._closed) {
-      this.push(null);
-      return;
-    }
-    if (this._i < this._answers.length) {
-      this.push(`${this._answers[this._i++]}\n`);
-    } else {
-      this._closed = true;
-      this.push(null);
-    }
+    if (this._reading) return;
+    this._reading = true;
+    setImmediate(() => {
+      this._reading = false;
+      if (this._i < this._answers.length) {
+        this.push(`${this._answers[this._i++]}\n`);
+      } else {
+        this.push(null);
+      }
+    });
   }
 }
 

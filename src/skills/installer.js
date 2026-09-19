@@ -68,11 +68,7 @@ export async function installSkillFromGitHub(source, options = {}) {
 
   // Candidate branches and file paths
   const branches = ['main', 'master'];
-  const possiblePaths = [
-    `skills/${skillName}/SKILL.md`,
-    `${skillName}/SKILL.md`,
-    'SKILL.md',
-  ];
+  const possiblePaths = [`skills/${skillName}/SKILL.md`, `${skillName}/SKILL.md`, 'SKILL.md'];
 
   let rawContent = null;
 
@@ -82,7 +78,7 @@ export async function installSkillFromGitHub(source, options = {}) {
       const rawUrl = `https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${branch}/${relPath}`;
       try {
         const res = await fetcher(rawUrl);
-        if (res && res.ok && res.status === 200) {
+        if (res?.ok && res.status === 200) {
           rawContent = await res.text();
           break;
         }

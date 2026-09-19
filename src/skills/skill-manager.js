@@ -37,10 +37,7 @@ export function parseSkillFrontmatter(raw) {
     let val = trimmed.slice(colonIndex + 1).trim();
 
     // Strip surrounding single/double quotes
-    if (
-      (val.startsWith('"') && val.endsWith('"')) ||
-      (val.startsWith("'") && val.endsWith("'"))
-    ) {
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
     metadata[key] = val;
