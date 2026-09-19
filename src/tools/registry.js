@@ -6,6 +6,7 @@ import { executeCommandTool } from './execute_command.js';
 import { gitAddCommitTool, gitDiffTool, gitStatusTool } from './git.js';
 import { grepFileTool } from './grep_file.js';
 import { listDirTool } from './list_dir.js';
+import { loadSkillTool } from './load_skill.js';
 import { patchFileTool } from './patch_file.js';
 import { readFileTool } from './read_file.js';
 import { searchFilesTool } from './search_files.js';
@@ -21,6 +22,7 @@ export const TOOLS_MAP = {
   write_file: writeFileTool,
   patch_file: patchFileTool,
   list_dir: listDirTool,
+  load_skill: loadSkillTool,
   execute_command: executeCommandTool,
   grep_file: grepFileTool,
   search_files: searchFilesTool,
@@ -39,6 +41,7 @@ export const READ_ONLY_TOOLS = new Set([
   'grep_file',
   'search_files',
   'list_dir',
+  'load_skill',
   'git_status',
   'git_diff',
   'web_fetch',
@@ -207,6 +210,21 @@ export const TOOL_DECLARATIONS = [
           description: 'Optional custom list of directory/file names to ignore',
         },
       },
+    },
+  },
+  {
+    name: 'load_skill',
+    description:
+      'Loads the full procedural guidelines, workflows, and instructions of an installed AI skill into context.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        skill_name: {
+          type: 'STRING',
+          description: 'The exact name of the installed skill (e.g., "frontend-design").',
+        },
+      },
+      required: ['skill_name'],
     },
   },
   {
@@ -454,6 +472,7 @@ export const TOOL_ARG_ALIASES = {
   ],
   web_fetch: [{ target: 'url', aliases: ['href', 'link', 'uri', 'target'] }],
   web_search: [{ target: 'query', aliases: ['q', 'search', 'searchQuery', 'keywords'] }],
+  load_skill: [{ target: 'skill_name', aliases: ['name', 'skill', 'skillName'] }],
 };
 
 /**
