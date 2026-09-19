@@ -87,14 +87,13 @@ describe('autocomplete: file suggestions', () => {
   test('@ after space triggers; email@host does not', () => {
     const s = getSuggestions('lihat @RE', 7, fileCtx);
     assert.equal(s.kind, 'file');
-    assert.deepEqual(
-      s.items.map((i) => i.value),
-      ['@README.md'],
-    );
+    assert.ok(s.items.some((i) => i.value === '@README.md'));
+    assert.ok(s.items.some((i) => i.value === '@src/cli/repl.js'));
     assert.equal(s.replaceStart, 6);
     assert.equal(s.replaceEnd, 9);
     assert.equal(getSuggestions('email@host', 10, fileCtx), null);
   });
+
 
   test('trailing slash drills into directory', () => {
     const s = getSuggestions('@src/', 5, fileCtx);
@@ -123,4 +122,18 @@ describe('autocomplete: file suggestions', () => {
   test('cursor past token end (whitespace follows) is not a trigger', () => {
     assert.equal(getSuggestions('@README.md ', 11, fileCtx), null);
   });
+
+  test('@ with no slash triggers global workspace search', () => {
+    const s = getSuggestions('@index', 6, fileCtx);
+    assert.equal(s.kind, 'file');
+    assert.ok(s.items.some((i) => i.value === '@src/index.js'));
+    assert.equal(s.dir, '');
+  });
+
+  test('@ with empty query returns top workspace files', () => {
+    const s = getSuggestions('@', 1, fileCtx);
+    assert.equal(s.kind, 'file');
+    assert.ok(s.items.some((i) => i.value === '@README.md'));
+  });
 });
+

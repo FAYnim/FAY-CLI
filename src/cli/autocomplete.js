@@ -11,7 +11,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { searchWorkspaceFiles } from '../utils/file-index.js';
 import { SLASH_COMMANDS_HELP } from './slash-commands.js';
+
 
 /** Directory entries never offered as suggestions. Dotfiles are skipped separately. */
 const SKIP_DIRS = new Set(['node_modules', '.git']);
@@ -89,28 +91,76 @@ export function getSuggestions(text, cursor, ctx = {}) {
   const filePrefix = (slash >= 0 ? rel.slice(slash + 1) : rel).toLowerCase();
   const dirPath = path.join(base, dirPart);
 
-  let entries = [];
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    entries = []; // missing path / EPERM / ENOTDIR → no suggestions, never throw
-  }
+  let items = [];
 
-  const items = entries
-    .filter((e) => !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
-    .filter((e) => e.name.toLowerCase().startsWith(filePrefix))
-    .sort(
-      (a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name),
-    )
-    .map((e) => {
-      const isDir = e.isDirectory();
-      const relDir = dirPart ? `${dirPart}/` : '';
-      return {
-        value: `@${relDir}${e.name}${isDir ? '/' : ''}`,
-        label: isDir ? `${e.name}/` : e.name,
-        isDir,
-      };
-    });
+  if (slash < 0) {
+    // ── Hybrid mode: local directory matches + global workspace file search ──
+    const immediateEntries = [];
+    try {
+      immediateEntries.push(...fs.readdirSync(base, { withFileTypes: true }));
+    } catch {
+      /* ignore */
+    }
+
+    const localDirs = immediateEntries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
+      .filter((e) => !filePrefix || e.name.toLowerCase().startsWith(filePrefix))
+      .map((e) => ({
+        value: `@${e.name}/`,
+        label: `${e.name}/`,
+        isDir: true,
+      }));
+
+    // If query is empty, also include immediate root files so @ lists root entries
+    const localFiles = !filePrefix
+      ? immediateEntries
+          .filter((e) => e.isFile() && !e.name.startsWith('.'))
+          .map((e) => ({
+            value: `@${e.name}`,
+            label: e.name,
+            isDir: false,
+          }))
+      : [];
+
+    const globalFiles = searchWorkspaceFiles(filePrefix, base, { limit: 12 }).map((filePath) => ({
+      value: `@${filePath}`,
+      label: filePath,
+      isDir: false,
+    }));
+
+    const seen = new Set();
+    for (const item of [...localDirs, ...localFiles, ...globalFiles]) {
+      if (!seen.has(item.value)) {
+        seen.add(item.value);
+        items.push(item);
+      }
+    }
+  } else {
+    // ── Hierarchical drilldown mode: reading specified dirPath ──
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+      entries = []; // missing path / EPERM / ENOTDIR → no suggestions, never throw
+    }
+
+    items = entries
+      .filter((e) => !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
+      .filter((e) => e.name.toLowerCase().startsWith(filePrefix))
+      .sort(
+        (a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name),
+      )
+      .map((e) => {
+        const isDir = e.isDirectory();
+        const relDir = dirPart ? `${dirPart}/` : '';
+        return {
+          value: `@${relDir}${e.name}${isDir ? '/' : ''}`,
+          label: isDir ? `${e.name}/` : e.name,
+          isDir,
+        };
+      });
+  }
 
   return { kind: 'file', items, replaceStart: start, replaceEnd: end, dir: dirPart };
 }
+

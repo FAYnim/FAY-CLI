@@ -95,9 +95,10 @@ export function getWorkspaceFiles(workingDir = process.cwd(), options = {}) {
       }
 
       for (const entry of entries) {
-        if (IGNORE_DIR_NAMES.has(entry.name)) continue;
+        if (IGNORE_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
 
         const fullPath = path.join(currentDir, entry.name);
+
         if (entry.isDirectory()) {
           stack.push(fullPath);
         } else if (entry.isFile()) {
