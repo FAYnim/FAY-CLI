@@ -5,6 +5,8 @@
  * Executable Entrypoint
  */
 
+import os from 'node:os';
+import path from 'node:path';
 import { createAgentOrchestrator } from '../src/agent/orchestrator.js';
 import { defaultSessionManager } from '../src/agent/session.js';
 import { parseArgs } from '../src/cli/args.js';
@@ -14,6 +16,8 @@ import { isPipedInput, mergePipedPrompt, readPipedStdin } from '../src/cli/pipin
 import { startRepl } from '../src/cli/repl.js';
 import { runSingleShot } from '../src/cli/single-shot.js';
 import { ConfigManager } from '../src/config/manager.js';
+import { installSkillFromGitHub, removeSkill } from '../src/skills/installer.js';
+import { discoverSkills } from '../src/skills/skill-manager.js';
 import { showSessionMenu } from '../src/ui/session-menu.js';
 import { ansi } from '../src/utils/ansi.js';
 import { logger } from '../src/utils/logger.js';
@@ -139,6 +143,67 @@ async function main() {
       defaultSessionManager.clearSessions();
       logger.success('All saved sessions cleared.');
       process.exit(0);
+    }
+  }
+
+  // Handle Skill Subcommands
+  if (parsed.command === 'skill') {
+    const sub = parsed.subcommand || 'list';
+    const [target] = parsed.args;
+    const projectRoot = process.cwd();
+    const homeDir = os.homedir();
+
+    if (sub === 'list') {
+      const skills = discoverSkills({ projectRoot, homeDir });
+      if (!skills.length) {
+        console.log('No skills installed.');
+        process.exit(0);
+      }
+      for (const s of skills) {
+        console.log(`[${s.scope}] ${s.name} (v${s.version}) by ${s.author} - ${s.description}`);
+      }
+      process.exit(0);
+    }
+
+    if (sub === 'add') {
+      if (!target) {
+        logger.error('Usage: faycli skill add <owner/repo> [--global]');
+        process.exit(1);
+      }
+      const isGlobal = Boolean(parsed.flags.global);
+      const targetDir = isGlobal
+        ? path.join(homeDir, '.agents', 'skills')
+        : path.join(projectRoot, '.agents', 'skills');
+
+      logger.info(`Installing skill from ${target}...`);
+      const res = await installSkillFromGitHub(target, { targetDir });
+      if (res.success) {
+        logger.success(`Skill installed to ${res.skillDir}`);
+        process.exit(0);
+      } else {
+        logger.error(`Failed to install skill: ${res.error}`);
+        process.exit(1);
+      }
+    }
+
+    if (sub === 'remove' || sub === 'rm') {
+      if (!target) {
+        logger.error('Usage: faycli skill remove <skill-name> [--global]');
+        process.exit(1);
+      }
+      const isGlobal = Boolean(parsed.flags.global);
+      const targetDir = isGlobal
+        ? path.join(homeDir, '.agents', 'skills')
+        : path.join(projectRoot, '.agents', 'skills');
+
+      const res = removeSkill(target, { targetDir });
+      if (res.success) {
+        logger.success(`Skill ${target} removed.`);
+        process.exit(0);
+      } else {
+        logger.error(`Failed to remove skill: ${res.error}`);
+        process.exit(1);
+      }
     }
   }
 

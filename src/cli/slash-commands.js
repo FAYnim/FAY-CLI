@@ -4,11 +4,14 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { compactSession } from '../agent/compactor.js';
 import { estimateSessionTokens } from '../agent/pruner.js';
 import { createSession, defaultSessionManager } from '../agent/session.js';
 import { getUsage, resetUsage } from '../agent/usage.js';
+import { installSkillFromGitHub, removeSkill } from '../skills/installer.js';
+import { discoverSkills, loadSkillContent } from '../skills/skill-manager.js';
 import { renderBox, renderStatusCard } from '../ui/box.js';
 import { renderMarkdown } from '../ui/markdown.js';
 import { showModelMenuFromConfig } from '../ui/model-menu.js';
@@ -20,6 +23,10 @@ import { runProviderAddWizard } from './provider-wizard.js';
 
 export const SLASH_COMMANDS_HELP = [
   { cmd: '/help', desc: 'Show this slash commands help menu' },
+  {
+    cmd: '/skill [list|add|remove|info|use]',
+    desc: 'Manage or inspect installed AI skills (skills.sh compatible)',
+  },
   {
     cmd: '/plan [title]',
     desc: 'Enter Plan Mode (read-only research & plan drafting in .fay/plans/)',
@@ -1031,6 +1038,116 @@ export async function executeSlashCommand(input, context = {}) {
 
       writeUsage();
       return { handled: true, action: 'mcp_usage', error: true };
+    }
+
+    case 'skill': {
+      const sub = (args[0] || 'list').toLowerCase();
+      const projectRoot = context.projectRoot || context.workingDir || process.cwd();
+      const homeDir = context.homeDir;
+
+      if (sub === 'list') {
+        const skills = discoverSkills({ projectRoot, homeDir });
+        if (!skills.length) {
+          stream.write(
+            `\n${ansi.dim('No skills installed.')} Use ${ansi.cyan('/skill add <owner/repo>')} to install one.\n\n`,
+          );
+          return { handled: true, action: 'skill_list', count: 0 };
+        }
+
+        const lines = skills.map((s) => {
+          const scopeLabel = s.scope === 'project' ? ansi.green('[project]') : ansi.blue('[global]');
+          return `${scopeLabel} ${ansi.bold(ansi.cyan(s.name))} ${ansi.dim(`v${s.version}`)} by ${s.author}\n  ${ansi.dim(s.description)}`;
+        });
+
+        const box = renderBox(lines.join('\n\n'), {
+          title: `Installed AI Skills (${skills.length})`,
+          borderColor: 'cyan',
+          borderStyle: 'round',
+          minWidth: 50,
+        });
+        stream.write(`\n${box}\n\n`);
+        return { handled: true, action: 'skill_list', count: skills.length };
+      }
+
+      if (sub === 'info') {
+        const name = args[1];
+        if (!name) {
+          stream.write(`\n${ansi.yellow('Usage:')} /skill info <skill-name>\n\n`);
+          return { handled: true, action: 'skill_info_usage', error: true };
+        }
+        const loaded = loadSkillContent(name, { projectRoot, homeDir });
+        if (!loaded) {
+          stream.write(`\n${ansi.red('✖')} Skill ${ansi.bold(name)} not found.\n\n`);
+          return { handled: true, action: 'skill_info_not_found', error: true };
+        }
+
+        stream.write(
+          `\n${ansi.bold(ansi.cyan(`Skill: ${loaded.skill.name}`))} ${ansi.dim(`(${loaded.skill.scope})`)}\n`,
+        );
+        stream.write(`${ansi.dim(loaded.skill.description)}\n\n`);
+        stream.write(renderMarkdown(loaded.content));
+        if (loaded.scripts.length > 0) {
+          stream.write(`\n${ansi.bold('Scripts:')}\n  ${loaded.scripts.join('\n  ')}\n`);
+        }
+        stream.write('\n\n');
+        return { handled: true, action: 'skill_info', skill: name };
+      }
+
+      if (sub === 'add') {
+        const source = args[1];
+        if (!source) {
+          stream.write(
+            `\n${ansi.yellow('Usage:')} /skill add <owner/repo> [--skill <name>] [--global]\n\n`,
+          );
+          return { handled: true, action: 'skill_add_usage', error: true };
+        }
+
+        const isGlobal = args.includes('--global') || args.includes('-g');
+        const targetDir = isGlobal
+          ? path.join(homeDir || os.homedir(), '.agents', 'skills')
+          : path.join(projectRoot, '.agents', 'skills');
+
+        stream.write(`\n${ansi.cyan('⧗')} Fetching skill from ${ansi.bold(source)}...\n`);
+        const res = await installSkillFromGitHub(args.slice(1).join(' '), { targetDir });
+        if (res.success) {
+          stream.write(`\n${ansi.green('✔')} Skill installed to ${ansi.white(res.skillDir)}\n\n`);
+          return { handled: true, action: 'skill_add', success: true };
+        } else {
+          stream.write(`\n${ansi.red('✖')} Failed to install skill: ${res.error}\n\n`);
+          return { handled: true, action: 'skill_add', error: true, message: res.error };
+        }
+      }
+
+      if (sub === 'remove' || sub === 'rm') {
+        const name = args[1];
+        if (!name) {
+          stream.write(`\n${ansi.yellow('Usage:')} /skill remove <skill-name> [--global]\n\n`);
+          return { handled: true, action: 'skill_remove_usage', error: true };
+        }
+
+        const isGlobal = args.includes('--global') || args.includes('-g');
+        const targetDir = isGlobal
+          ? path.join(homeDir || os.homedir(), '.agents', 'skills')
+          : path.join(projectRoot, '.agents', 'skills');
+
+        const res = removeSkill(name, { targetDir });
+        if (res.success) {
+          stream.write(`\n${ansi.green('✔')} Skill ${ansi.bold(name)} removed.\n\n`);
+          return { handled: true, action: 'skill_remove', success: true };
+        } else {
+          stream.write(`\n${ansi.red('✖')} Failed to remove skill: ${res.error}\n\n`);
+          return { handled: true, action: 'skill_remove', error: true, message: res.error };
+        }
+      }
+
+      stream.write(
+        `\n${ansi.yellow('Skill Commands:')}\n` +
+          `  /skill list                    - List installed skills\n` +
+          `  /skill info <name>             - View skill guidelines\n` +
+          `  /skill add <repo> [--global]   - Install from GitHub\n` +
+          `  /skill remove <name>           - Delete installed skill\n\n`,
+      );
+      return { handled: true, action: 'skill_help' };
     }
 
     case 'exit':

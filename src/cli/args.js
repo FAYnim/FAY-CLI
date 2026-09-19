@@ -31,6 +31,7 @@ export function parseArgs(rawArgs = []) {
     modelRemove: null, // --remove <m[,m2,...]> : remove model(s) from a provider's catalog
     modelClear: false, // --clear             : reset catalog to builtin defaults
     maxIterations: null, // --max-iterations <n> : cap ReAct loop (default unlimited)
+    global: false, // --global, -g           : apply operation globally
   };
 
   const positional = [];
@@ -47,6 +48,8 @@ export function parseArgs(rawArgs = []) {
       flags.verbose = true;
     } else if (arg === '--yes' || arg === '-y') {
       flags.yes = true;
+    } else if (arg === '--global' || arg === '-g') {
+      flags.global = true;
     } else if (arg.startsWith('--provider=')) {
       flags.provider = arg.slice(11).trim();
     } else if (arg === '--provider' || arg === '-p') {
@@ -216,6 +219,10 @@ export function parseArgs(rawArgs = []) {
     } else if (firstWord === 'resume') {
       command = 'resume';
       subcommand = positional[1] || null;
+      subArgs = positional.slice(2);
+    } else if (firstWord === 'skill') {
+      command = 'skill';
+      subcommand = positional[1] || 'list';
       subArgs = positional.slice(2);
     } else if (firstWord === 'help') {
       command = 'help';
