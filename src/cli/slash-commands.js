@@ -58,6 +58,16 @@ export const SLASH_COMMANDS_HELP = [
     cmd: '/undo [n]',
     desc: 'Undo the last file edit (or n steps back) performed by the agent',
   },
+  {
+    cmd: '/mcp [list]',
+    desc: 'List configured MCP servers and their connection state',
+  },
+  {
+    cmd: '/mcp add <id> <command> [args...]',
+    desc: 'Register an MCP server and connect it now (no quoting — edit config.json for args with spaces)',
+  },
+  { cmd: '/mcp remove <id>', desc: 'Delete an MCP server from config' },
+  { cmd: '/mcp enable|disable <id>', desc: 'Turn an MCP server on or off for future sessions' },
   { cmd: '/clear', desc: 'Clear the terminal screen' },
   { cmd: '/instructions', desc: 'Show project instruction files loaded into the system prompt' },
   { cmd: '/config', desc: 'Display active CLI configuration settings' },
@@ -879,6 +889,148 @@ export async function executeSlashCommand(input, context = {}) {
       const card = renderStatusCard('Configuration Settings', cfg);
       stream.write(`\n${card}\n\n`);
       return { handled: true, action: 'config_info' };
+    }
+
+    case 'mcp': {
+      const servers = configMgr.get('mcpServers') || {};
+      const sub = (args[0] || 'list').toLowerCase();
+      const writeUsage = () => {
+        stream.write(
+          `\n${ansi.yellow('⚠')} Usage:\n` +
+            `  ${ansi.cyan('/mcp')} ${ansi.dim('— list configured servers')}\n` +
+            `  ${ansi.cyan('/mcp add <id> <command> [args...]')}\n` +
+            `  ${ansi.cyan('/mcp remove <id>')}\n` +
+            `  ${ansi.cyan('/mcp enable|disable <id>')}\n` +
+            `${ansi.dim('Arguments containing spaces must be set by editing ~/.faycli/config.json directly.')}\n\n`,
+        );
+      };
+
+      // Reads the raw config object rather than using configMgr.delete(),
+      // because delete() only understands flat keys and would remove a literal
+      // "mcpServers.echo" key instead of the nested entry.
+      const mutateServers = (fn) => {
+        const cfg = configMgr.loadConfig();
+        if (!cfg.mcpServers || typeof cfg.mcpServers !== 'object') cfg.mcpServers = {};
+        const result = fn(cfg.mcpServers);
+        configMgr.saveConfig(cfg);
+        return result;
+      };
+
+      if (sub === 'list' || sub === 'ls') {
+        const ids = Object.keys(servers);
+        if (ids.length === 0) {
+          stream.write(
+            `\n${ansi.dim('No MCP servers configured.')}\n` +
+              `Add one with ${ansi.cyan('/mcp add <id> <command> [args...]')}\n\n`,
+          );
+          return { handled: true, action: 'mcp_list', count: 0 };
+        }
+
+        const connected = new Set(orchestrator?.mcpManager?.listConnected?.() || []);
+        const lines = ids.map((id) => {
+          const cfg = servers[id] || {};
+          let state;
+          if (!cfg.enabled) {
+            state = ansi.dim('disabled');
+          } else if (connected.has(id)) {
+            state = ansi.green('connected');
+          } else {
+            state = ansi.yellow('enabled, not connected');
+          }
+          const cmd = [cfg.command, ...(cfg.args || [])].filter(Boolean).join(' ');
+          return `  ${ansi.bold(id.padEnd(16))} ${state}\n${ansi.dim(`    ${cmd}`)}`;
+        });
+
+        const box = renderBox(lines.join('\n'), {
+          title: `MCP Servers (${ids.length})`,
+          borderColor: 'cyan',
+          borderStyle: 'round',
+          minWidth: 50,
+        });
+        stream.write(`\n${box}\n\n`);
+        return { handled: true, action: 'mcp_list', count: ids.length };
+      }
+
+      if (sub === 'add') {
+        const id = args[1];
+        const command = args[2];
+        const cmdArgs = args.slice(3);
+
+        if (!id || !command) {
+          writeUsage();
+          return { handled: true, action: 'mcp_add_usage', error: true };
+        }
+
+        mutateServers((map) => {
+          map[id] = { enabled: true, command, args: cmdArgs };
+        });
+
+        let note = 'Restart faycli to connect it.';
+        const mgr = orchestrator?.mcpManager;
+        if (mgr && typeof mgr.connectServer === 'function') {
+          try {
+            await mgr.connectServer(id, { enabled: true, command, args: cmdArgs });
+            const count = mgr.clients?.get?.(id)?.tools?.length ?? 0;
+            note = `Connected — ${count} tool(s) available now.`;
+          } catch (err) {
+            note = `Saved, but it failed to start: ${err.message}`;
+          }
+        }
+
+        stream.write(
+          `\n${ansi.green('✔')} MCP server ${ansi.bold(id)} saved. ${ansi.dim(note)}\n\n`,
+        );
+        return { handled: true, action: 'mcp_add', server: id };
+      }
+
+      if (sub === 'remove' || sub === 'rm') {
+        const id = args[1];
+        if (!id) {
+          writeUsage();
+          return { handled: true, action: 'mcp_remove_usage', error: true };
+        }
+        if (!servers[id]) {
+          stream.write(`\n${ansi.yellow('⚠')} No MCP server named ${ansi.bold(id)}.\n\n`);
+          return { handled: true, action: 'mcp_remove_missing', error: true, message: id };
+        }
+
+        mutateServers((map) => {
+          delete map[id];
+        });
+        orchestrator?.mcpManager?._unregisterServer?.(id);
+
+        stream.write(
+          `\n${ansi.green('✔')} MCP server ${ansi.bold(id)} removed.` +
+            `${ansi.dim(' Restart faycli to drop its tools.')}\n\n`,
+        );
+        return { handled: true, action: 'mcp_remove', server: id };
+      }
+
+      if (sub === 'enable' || sub === 'disable') {
+        const id = args[1];
+        if (!id) {
+          writeUsage();
+          return { handled: true, action: 'mcp_toggle_usage', error: true };
+        }
+        if (!servers[id]) {
+          stream.write(`\n${ansi.yellow('⚠')} No MCP server named ${ansi.bold(id)}.\n\n`);
+          return { handled: true, action: 'mcp_toggle_missing', error: true, message: id };
+        }
+
+        const enabled = sub === 'enable';
+        configMgr.set(`mcpServers.${id}.enabled`, enabled);
+
+        stream.write(
+          `\n${ansi.green('✔')} MCP server ${ansi.bold(id)} ${enabled ? 'enabled' : 'disabled'}.` +
+            `${ansi.dim(
+              enabled ? ' Restart faycli to connect it.' : ' Restart faycli to drop its tools.',
+            )}\n\n`,
+        );
+        return { handled: true, action: `mcp_${sub}`, server: id };
+      }
+
+      writeUsage();
+      return { handled: true, action: 'mcp_usage', error: true };
     }
 
     case 'exit':

@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { configManager } from '../config/manager.js';
+import { parseMcpToolName } from '../mcp/protocol.js';
 import { showConfirmDialog } from '../ui/confirm-menu.js';
 import { renderDiffPreview } from '../ui/diff-preview.js';
 import { logger } from '../utils/logger.js';
@@ -43,6 +44,12 @@ export class SecurityGuard {
       typeof options.onAfterConfirm === 'function' ? options.onAfterConfirm : null;
     this._stream = options.stream || null;
     this.mode = options.mode || 'build';
+    /**
+     * MCP servers the user approved during this session. Approval is per
+     * server, not per tool, so a 20-tool server prompts once.
+     * @type {Set<string>}
+     */
+    this._approvedMcpServers = new Set();
   }
 
   /**
@@ -223,6 +230,12 @@ export class SecurityGuard {
           reason: `Tool "${toolName}" is not permitted in Plan Mode. Use /build to switch mode.`,
         };
       }
+      if (typeof toolName === 'string' && toolName.startsWith('mcp__')) {
+        return {
+          allowed: false,
+          reason: `MCP tools are not permitted in Plan Mode. Use /build to switch mode.`,
+        };
+      }
       if (toolName === 'write_file') {
         const rawPath = args.filePath || '';
         const normalized = path.normalize(rawPath).replace(/\\/g, '/');
@@ -236,6 +249,14 @@ export class SecurityGuard {
           };
         }
       }
+    }
+
+    // MCP tools spawn third-party processes with whatever filesystem and
+    // network access their server has. They have no case in the builtin switch
+    // below, which would otherwise fall through to `default: allowed`, so they
+    // are routed explicitly.
+    if (typeof toolName === 'string' && toolName.startsWith('mcp__')) {
+      return this._authorizeMcp(toolName, args);
     }
 
     switch (toolName) {
@@ -281,7 +302,8 @@ export class SecurityGuard {
           const outsideList = outsidePaths.map((p) => `- ${p.raw}`).join('\n');
           let description = 'AI ingin menjalankan perintah shell yang mungkin berisiko:';
           if (outsidePaths.length > 0) {
-            description = 'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:';
+            description =
+              'AI ingin menjalankan perintah shell yang menyentuh path di luar workspace:';
           } else if (isFallback) {
             description = 'AI mengusulkan perintah shell dari teks respons (fallback parser):';
           }
@@ -528,5 +550,54 @@ export class SecurityGuard {
       default:
         return { allowed: true };
     }
+  }
+
+  /**
+   * Runtime gate for MCP tool calls.
+   *
+   * The server binary itself was approved when the user added it to config
+   * (the `/mcp add` command writes the exact command line). This gate is the
+   * backstop for a config that was hand-edited, copied from a repo, or
+   * shipped by a dotfiles setup — cases where the user never saw the command.
+   *
+   * Approval is memoized per server for the life of the session: a server with
+   * twenty tools prompts once, not twenty times.
+   *
+   * @param {string} toolName - namespaced name, e.g. `mcp__fs__read_file`
+   * @param {object} args
+   * @returns {Promise<{ allowed: boolean, reason?: string }>}
+   */
+  async _authorizeMcp(toolName, args) {
+    const parsed = parseMcpToolName(toolName);
+    if (!parsed) {
+      return { allowed: false, reason: `Malformed MCP tool name "${toolName}".` };
+    }
+
+    if (this.autoApprove || this._approvedMcpServers.has(parsed.server)) {
+      return { allowed: true };
+    }
+
+    let argPreview = '';
+    try {
+      argPreview = JSON.stringify(args ?? {}, null, 2).slice(0, 400);
+    } catch {
+      argPreview = '[arguments not serializable]';
+    }
+
+    const confirmed = await this.promptConfirmation({
+      description: `AI ingin memakai tool dari MCP server "${parsed.server}":`,
+      target: `${toolName}\n\n${argPreview}`,
+      question: `Apakah anda mengizinkan server "${parsed.server}" menjalankan tool ini?`,
+    });
+
+    if (!confirmed) {
+      return {
+        allowed: false,
+        reason: `User denied MCP tool "${toolName}" from server "${parsed.server}".`,
+      };
+    }
+
+    this._approvedMcpServers.add(parsed.server);
+    return { allowed: true };
   }
 }

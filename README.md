@@ -317,6 +317,70 @@ faycli --session sess_1700000000_abc123
 
 ---
 
+## MCP Servers
+
+`faycli` can connect [MCP](https://modelcontextprotocol.io) servers over stdio and expose
+their tools to the agent alongside the 12 built-in tools. No extra dependency is required.
+
+### Adding a server
+
+```
+/mcp add <id> <command> [args...]
+```
+
+For example, the reference filesystem server:
+
+```
+/mcp add fs npx -y @modelcontextprotocol/server-filesystem /home/user/projects
+```
+
+The server is saved to `~/.faycli/config.json` under `mcpServers` and connected immediately.
+Its tools appear to the model as `mcp__fs__read_file`, `mcp__fs__write_file`, and so on.
+
+Arguments containing spaces cannot be expressed with `/mcp add` — edit `~/.faycli/config.json`
+directly for those:
+
+```json
+{
+  "mcpServers": {
+    "fs": {
+      "enabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/my projects"],
+      "env": { "SOME_TOKEN": "..." }
+    }
+  }
+}
+```
+
+### Managing servers
+
+| Command | Effect |
+|---|---|
+| `/mcp` or `/mcp list` | Show every configured server, its command, and whether it connected this session |
+| `/mcp add <id> <command> [args...]` | Register and connect a server |
+| `/mcp remove <id>` | Delete a server from config |
+| `/mcp enable <id>` / `/mcp disable <id>` | Toggle a server for future sessions |
+
+### Security
+
+Spawning an MCP server is equivalent to running `execute_command` — the server runs with your
+user's full permissions. Three things follow from that:
+
+1. **Servers are never enabled by default.** A server only starts if its config entry has
+   `"enabled": true`.
+2. **The first tool call to each server prompts for confirmation, once per session.** This
+   covers configs that were hand-edited, copied from a repository, or shipped in a dotfiles
+   setup — cases where you never saw the command line.
+3. **MCP tools are blocked in Plan Mode**, the same as `execute_command` and `patch_file`.
+
+### Known limitations
+
+- Tools only. MCP *resources* and *prompts* are not exposed.
+- stdio transport only. SSE and streamable-HTTP servers are not supported.
+- `close()` ends stdin without escalating to `SIGTERM`. A server that ignores EOF lingers until
+  `faycli` exits.
+
 ## ⚙️ Configuration
 
 ### All Config Commands

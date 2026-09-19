@@ -4,6 +4,7 @@
  */
 
 import { AgentOrchestrator, createAgentOrchestrator } from '../agent/orchestrator.js';
+import { McpManager } from '../mcp/manager.js';
 import { contextBudgetLimit, getContextTokens, getUsage } from '../agent/usage.js';
 import { APP_NAME } from '../config/constants.js';
 import { ConfigManager } from '../config/manager.js';
@@ -83,6 +84,18 @@ export async function startRepl(options = {}) {
     };
   }
 
+  // MCP servers: connect the ones the user enabled. A server that fails to
+  // start is collected rather than thrown, so one broken entry cannot block
+  // the REPL. Failures are reported after the banner.
+  const mcpManager =
+    orchestrator.mcpManager ||
+    new McpManager({
+      servers: configMgr.get('mcpServers') || {},
+      logger,
+    });
+  orchestrator.mcpManager = mcpManager;
+  const mcpStatus = await mcpManager.connectAll();
+
   const session = orchestrator.getSession();
   const activeModel = orchestrator.llmClient
     ? orchestrator.llmClient.getModel()
@@ -99,6 +112,11 @@ export async function startRepl(options = {}) {
       `Model   : ${ansi.bold(ansi.cyan(activeModel))}`,
       `Session : ${ansi.bold(ansi.yellow(session.id))}`,
       `WorkDir : ${ansi.dim(orchestrator.workingDir)}`,
+      ...(mcpStatus.connected.length > 0
+        ? [
+            `MCP     : ${ansi.bold(ansi.green(`${mcpStatus.connected.length} server(s)`))} ${ansi.dim(mcpStatus.connected.join(', '))}`,
+          ]
+        : []),
       `Commands: Type ${ansi.cyan('/help')} for menu or ${ansi.cyan('/exit')} to quit`,
     ],
   });
@@ -112,6 +130,15 @@ export async function startRepl(options = {}) {
       const fileList = instructionFiles.map((f) => ansi.cyan(f)).join(', ');
       output.write(`${ansi.cyan('ℹ')} ${ansi.dim('Loaded instructions:')} ${fileList}\n\n`);
     }
+  }
+
+  if (mcpStatus.failed.length > 0) {
+    for (const failure of mcpStatus.failed) {
+      output.write(
+        `${ansi.yellow('⚠')} ${ansi.dim(`MCP server "${failure.server}" failed:`)} ${failure.message}\n`,
+      );
+    }
+    output.write('\n');
   }
 
   let isBusy = false;
@@ -205,6 +232,7 @@ export async function startRepl(options = {}) {
           stream: output,
           input,
           thoughtDisplay,
+          mcpManager,
           onWizardActive: (active) => {
             _wizardActive = active;
           },
@@ -366,5 +394,6 @@ export async function startRepl(options = {}) {
   }
 
   process.removeListener('SIGINT', onProcessSigint);
+  await mcpManager.closeAll();
   closePromptLine(input);
 }

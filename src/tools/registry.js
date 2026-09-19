@@ -45,6 +45,72 @@ export const READ_ONLY_TOOLS = new Set([
 ]);
 
 /**
+ * Declarations registered at runtime (MCP servers). Kept separate from the
+ * builtin TOOL_DECLARATIONS so a reconnect can replace one server's tools
+ * without rebuilding the static table.
+ *
+ * @type {Map<string, object>}
+ */
+const dynamicDeclarations = new Map();
+
+/**
+ * Registers a runtime tool so it behaves exactly like a builtin: it appears in
+ * `getToolDeclarations()`, dispatches through `dispatchToolCall()`, and routes
+ * through `SecurityGuard`.
+ *
+ * Re-registering an existing name replaces the handler and declaration, which
+ * is what a reconnect needs.
+ *
+ * @param {string} name - namespaced tool name, e.g. `mcp__fs__read_file`
+ * @param {{ declaration?: object, handler: Function, readOnly?: boolean }} spec
+ * @returns {void}
+ */
+export function registerTool(name, spec) {
+  if (!name || typeof name !== 'string') {
+    throw new TypeError('registerTool: name must be a non-empty string');
+  }
+  if (!spec || typeof spec.handler !== 'function') {
+    throw new TypeError(`registerTool: "${name}" requires a handler function`);
+  }
+
+  TOOLS_MAP[name] = spec.handler;
+
+  if (spec.declaration) {
+    dynamicDeclarations.set(name, spec.declaration);
+  }
+
+  if (spec.readOnly) {
+    READ_ONLY_TOOLS.add(name);
+  } else {
+    READ_ONLY_TOOLS.delete(name);
+  }
+}
+
+/**
+ * Removes runtime-registered tools.
+ *
+ * @param {string[]} [names] - names to drop; omit to drop every dynamic tool
+ * @returns {void}
+ */
+export function unregisterTools(names) {
+  const targets = Array.isArray(names) ? names : [...dynamicDeclarations.keys()];
+  for (const name of targets) {
+    delete TOOLS_MAP[name];
+    dynamicDeclarations.delete(name);
+    READ_ONLY_TOOLS.delete(name);
+  }
+}
+
+/**
+ * Lists the names registered at runtime (not the 12 builtins).
+ *
+ * @returns {string[]}
+ */
+export function listDynamicTools() {
+  return [...dynamicDeclarations.keys()];
+}
+
+/**
  * Gemini Function Declaration Schemas for all available tools
  */
 export const TOOL_DECLARATIONS = [
@@ -282,12 +348,20 @@ export const TOOL_DECLARATIONS = [
 ];
 
 /**
- * Returns Gemini API function declarations array
+ * Returns the full Gemini function declarations array: the 12 builtins plus
+ * anything registered at runtime.
+ *
+ * Each entry is a fresh deep clone, so a caller that mutates the result (the
+ * OpenAI adapter lowercases schema types in place) cannot corrupt the source
+ * tables.
  *
  * @returns {Array<object>}
  */
 export function getToolDeclarations() {
-  return JSON.parse(JSON.stringify(TOOL_DECLARATIONS));
+  const builtin = JSON.parse(JSON.stringify(TOOL_DECLARATIONS));
+  if (dynamicDeclarations.size === 0) return builtin;
+  const dynamic = [...dynamicDeclarations.values()].map((d) => JSON.parse(JSON.stringify(d)));
+  return [...builtin, ...dynamic];
 }
 
 /**
