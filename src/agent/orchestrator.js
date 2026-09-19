@@ -303,10 +303,18 @@ export class AgentOrchestrator {
         })
       : null;
 
-    // Add user prompt to session history if provided
-    if (prompt && typeof prompt === 'string' && prompt.trim() !== '') {
-      this.session.addUserMessage(prompt.trim());
+    // Add user prompt to session history if provided (support clean displayPrompt)
+    const displayText =
+      options.displayPrompt && typeof options.displayPrompt === 'string'
+        ? options.displayPrompt.trim()
+        : prompt && typeof prompt === 'string'
+          ? prompt.trim()
+          : '';
+
+    if (displayText !== '') {
+      this.session.addUserMessage(displayText);
     }
+
 
     while (currentIteration < maxIters) {
       if (signal?.aborted) {
@@ -362,6 +370,25 @@ export class AgentOrchestrator {
       const prunedContents = pruneMessages(rawMessages, {
         maxTokens: this.maxContextTokens,
       });
+
+      // If displayPrompt was used, inject the full expanded prompt into the active turn's user message
+      if (
+        options.displayPrompt &&
+        prompt &&
+        prompt !== options.displayPrompt &&
+        prunedContents.length > 0
+      ) {
+        for (let i = prunedContents.length - 1; i >= 0; i--) {
+          if (prunedContents[i].role === 'user') {
+            prunedContents[i] = {
+              ...prunedContents[i],
+              parts: [{ text: prompt.trim() }],
+            };
+            break;
+          }
+        }
+      }
+
 
       // Step 1.5: Snapshot the estimator baseline for real-usage anchoring
       markRequestStart(this.session);
