@@ -19,15 +19,13 @@
 - 🔒 **Security Guard** — human-in-the-loop confirmation, command blacklist, safe path jail
 - ⚡ **Ultra-Lightweight** — startup `< 300 ms`, RAM `< 50 MB` idle
 - 📱 **Termux-Native** — no `node-gyp`, no binary compilation, pure ESM Node.js
-- 🔧 **12 Local Tools & Parallel Execution** — `read_file`, `write_file`, `patch_file`, `list_dir`, `execute_command`, `grep_file`, `search_files`, `git_status`, `git_diff`, `git_add_commit`, `web_fetch`, `web_search` with concurrent read execution (`Promise.all`)
+- 🔧 **13 Local Tools & Parallel Execution** — `read_file`, `write_file`, `patch_file`, `list_dir`, `load_skill`, `execute_command`, `grep_file`, `search_files`, `git_status`, `git_diff`, `git_add_commit`, `web_fetch`, `web_search` with concurrent read execution (`Promise.all`)
+- 🧠 **Open AI Skills Ecosystem** — compatible with [skills.sh](https://skills.sh/) (`vercel-labs/skills`) and [getdesign.md](https://getdesign.md/). Dual-tier project/global discovery (`.agents/skills/` & `~/.agents/skills/`), token-efficient catalog injection, and autonomous + explicit activation
+- 📂 **Smart Context Mentions** — `@file` fuzzy file matching and `@skill:<name>` skill activation with dynamic TAB autocompletion in interactive REPL
 - 🎨 **Rich Terminal UI** — ANSI Markdown renderer, live spinner, syntax highlighting
 - 🌐 **Multi-Provider** — 2 native adapters (Gemini, OpenAI) + unlimited OpenAI-compatible endpoints (Groq, OpenRouter, DeepSeek, Ollama, custom)
 - 🧩 **Multi-Model Catalog** — per-provider model lists with interactive TUI picker & CLI CRUD (`faycli model`)
-
-> **Latest on `feat/multi-model-phase1`:** Phase 1–4 of the multi-model plan landed — per-provider
-> `models[]` catalog, zero-dependency interactive `/model` picker, non-interactive `faycli model
-> --list/--set` flags, and catalog CRUD (`--add` / `--remove` / `--clear`).
-> **547/556 tests pass** (9 pre-existing failures), 0 regressions.
+- 📝 **Plan & Build Modes** — dedicated architecture planning mode (`/plan`) with zero-placeholder rigor before code modification (`/build`)
 
 ---
 
@@ -267,6 +265,15 @@ After every agent turn, a one-line usage summary appears above the next prompt:
 |---|---|
 | `/help` | Display all available slash commands |
 | `/model [name]` | View or switch active model (interactive TUI menu on TTY) |
+| `/provider [id]` | Switch or configure LLM providers interactively |
+| `/skill list` | List installed skills (project & global) |
+| `/skill add <src>` | Install skill from GitHub (`owner/repo` or raw URL) |
+| `/skill remove <name>` | Delete an installed skill |
+| `/skill info <name>` | View skill frontmatter metadata & instructions |
+| `/skill use <name>` | Explicitly activate skill instructions for next prompt |
+| `/plan [target]` | Switch to Plan Mode (read-only architectural planning) |
+| `/build` | Switch to Build Mode (autonomous implementation & execution) |
+| `/history` | View recent conversation history and message roles |
 | `/session` | Show current session info and ID |
 | `/new` | Start a new session in the same REPL (previous session is saved; `faycli resume <id>` to return) |
 | `/clear` | Clear conversation history |
@@ -315,12 +322,31 @@ faycli session clear
 faycli --session sess_1700000000_abc123
 ```
 
+### 5. Smart Mentions & Autocomplete (`@file`, `@skill:`)
+
+Inside interactive REPL mode, `faycli` provides instant file and skill context injection with fuzzy autocompletion:
+
+- **File Mentions (`@path/to/file`)**:
+  Type `@` followed by any path or partial filename and press `TAB`. A real-time fuzzy matcher suggests project files. The full content of selected files is extracted and injected into the LLM request wrapped in `<context_file path="...">` tags.
+  ```text
+  faycli ❯ Tolong refactor fungsi login di @src/auth/login.js agar mendukung 2FA
+  ```
+
+- **Skill Mentions (`@skill:<name>`)**:
+  Type `@skill:` and press `TAB` to list all available project and global AI skills. Selecting a skill embeds its instructions into `<context_skill name="...">` blocks:
+  ```text
+  faycli ❯ @skill:frontend-design Buat landing page modern dengan glassmorphism
+  ```
+
+- **Command Autocompletion**:
+  Press `TAB` on `/` or `/skill` or `/model` to view and complete available slash commands and subcommands.
+
 ---
 
 ## MCP Servers
 
 `faycli` can connect [MCP](https://modelcontextprotocol.io) servers over stdio and expose
-their tools to the agent alongside the 12 built-in tools. No extra dependency is required.
+their tools to the agent alongside the 13 built-in tools. No extra dependency is required.
 
 ### Adding a server
 
@@ -380,6 +406,70 @@ user's full permissions. Three things follow from that:
 - stdio transport only. SSE and streamable-HTTP servers are not supported.
 - `close()` ends stdin without escalating to `SIGTERM`. A server that ignores EOF lingers until
   `faycli` exits.
+
+---
+
+## 🧠 AI Skills System (`skills.sh` Compatible)
+
+`faycli` features a native, open-standard AI Skills subsystem compliant with the [`skills.sh`](https://skills.sh/) (`vercel-labs/skills`) and [`getdesign.md`](https://getdesign.md/) open specification.
+
+Skills encapsulate expert procedural guidelines, coding standards, design rules, or domain-specific workflows into modular, reusable packages.
+
+### Standard `SKILL.md` Format
+
+Each skill is stored in its own folder containing a `SKILL.md` with YAML frontmatter:
+
+```markdown
+---
+name: frontend-design
+description: "Create distinctive, production-grade frontend interfaces."
+author: official
+version: 1.0.0
+---
+
+# Frontend Design Guidelines
+1. Avoid generic AI layouts; use distinct typography and color accents.
+2. Structure CSS variables for theme tokens.
+```
+
+### Dual-Tier Discovery & Precedence
+
+`faycli` automatically discovers skills across two scopes:
+- **Project Scope** (checked first):
+  - `.agents/skills/<name>/SKILL.md`
+  - `.fay/skills/<name>/SKILL.md`
+- **Global Scope** (shared across all projects):
+  - `~/.agents/skills/<name>/SKILL.md`
+  - `~/.fay/skills/<name>/SKILL.md`
+
+> **Override Rule:** If a skill with the same name exists in both project and global scopes, the **Project-level skill takes precedence**.
+
+### Dual Activation (Token-Efficient)
+
+To conserve model context and reduce token costs, full skill contents are **never** dumped into the system prompt. Instead:
+1. **Compact Catalog Injection**: Only a lightweight `<available_skills>` summary (name, scope, and description) is included in the system prompt.
+2. **Autonomous Activation**: When the agent encounters a task matching a skill description, it autonomously invokes the built-in `load_skill` actuator tool to fetch full instructions.
+3. **Explicit Activation**: You can explicitly inject any skill into your prompt using `@skill:<name>` or via `/skill use <name>` in the REPL.
+
+### Built-in Zero-Dependency Installer
+
+Install skills directly from GitHub repositories without requiring external npm packages:
+
+```bash
+# Terminal CLI
+faycli skill add vercel-labs/skills/frontend-design
+faycli skill add user/repo --global   # Install globally to ~/.agents/skills/
+faycli skill list                     # List installed skills with scopes
+faycli skill info frontend-design     # View skill metadata & instructions
+faycli skill remove frontend-design   # Delete an installed skill
+
+# Inside REPL
+/skill add vercel-labs/skills/frontend-design
+/skill list
+/skill use frontend-design
+```
+
+---
 
 ## ⚙️ Configuration
 
@@ -581,13 +671,14 @@ Run the CLI only in environments where you accept that the model has your privil
 
 ## 🔧 Local Tools (Actuators) & Concurrency
 
-faycli equips the AI agent with 12 built-in tools. Tools marked **Read-Only / Idempotent** run in parallel via `Promise.all()` whenever the LLM emits multiple calls in a single turn, cutting latency dramatically. Mutating tools run sequentially to preserve filesystem integrity.
+faycli equips the AI agent with 13 built-in tools. Tools marked **Read-Only / Idempotent** run in parallel via `Promise.all()` whenever the LLM emits multiple calls in a single turn, cutting latency dramatically. Mutating tools run sequentially to preserve filesystem integrity.
 
 ### ⚡ Parallel Execution (Read-Only)
 - `read_file` — Read file content with line slicing (`filePath`, `startLine?`, `endLine?`, `encoding?`)
 - `grep_file` — Substring or regex search across files (`query`, `dirPath?`, `pattern?`, `caseSensitive?`)
 - `search_files` — Glob file matcher (`pattern`, `dirPath?`, `maxResults?`)
 - `list_dir` — Explore directory structure with depth control (`dirPath?`, `depth?`, `showHidden?`)
+- `load_skill` — Load specialized workflow and instructions for an installed skill (`skillName`)
 - `git_status` — Check porcelain working-tree status (`workingDir?`)
 - `git_diff` — Show unstaged/staged diff (`file?`, `staged?`, `workingDir?`)
 - `web_fetch` — Fetch and extract URL web content (`url`, `raw?`)
@@ -674,7 +765,7 @@ node scripts/benchmark.js
 ## 🧪 Testing
 
 ```bash
-# Run all unit tests (Step 1–5)
+# Run all unit tests (930+ tests, 100% pass)
 npm test
 # or
 node --test tests/*.test.js
@@ -691,7 +782,7 @@ node --test tests/*.test.js tests/e2e/*.test.js
 npm run benchmark
 ```
 
-`npm test` runs the unit suite only. `npm test:e2e` exercises the real CLI against live
+`npm test` runs the complete unit suite with zero external dependencies. `npm test:e2e` exercises the real CLI against live
 provider APIs and requires network + API credentials, so it is intentionally excluded
 from `npm test` and CI; run it locally.
 
@@ -706,11 +797,15 @@ FAY-CLI/
 ├── src/
 │   ├── cli/
 │   │   ├── args.js               # Argument parser
+│   │   ├── autocomplete.js       # TAB suggestion provider (@file, @skill, commands)
 │   │   ├── help.js               # --help output
 │   │   ├── piping.js             # UNIX stdin pipe handler
 │   │   ├── repl.js               # Interactive REPL
 │   │   ├── single-shot.js        # Single-shot task runner
-│   │   └── slash-commands.js     # /help, /model, /session, etc.
+│   │   └── slash-commands.js     # /help, /model, /skill, /plan, /build, etc.
+│   ├── skills/
+│   │   ├── skill-manager.js      # Multi-scope discovery & frontmatter parser
+│   │   └── installer.js          # Pure Node.js HTTPS installer & downloader
 │   ├── config/
 │   │   ├── constants.js          # App constants & defaults
 │   │   └── manager.js            # Config load/save/get/set
@@ -723,18 +818,26 @@ FAY-CLI/
 │   │   ├── write_file.js         # Tool: write file atomically
 │   │   ├── patch_file.js         # Tool: search-and-replace patch
 │   │   ├── list_dir.js           # Tool: directory explorer
+│   │   ├── load_skill.js         # Tool: load procedural skill instructions
 │   │   ├── execute_command.js    # Tool: shell command executor
-│   │   └── registry.js           # Tool registry & Gemini schemas
+│   │   ├── grep_file.js          # Tool: ripgrep-style file search
+│   │   ├── search_files.js       # Tool: glob file search
+│   │   ├── git.js                # Tool: git status, diff, add+commit
+│   │   ├── web_fetch.js          # Tool: web fetcher
+│   │   ├── web_search.js         # Tool: web searcher
+│   │   └── registry.js           # Tool registry & LLM schemas
 │   ├── llm/
 │   │   ├── gemini.js             # Gemini API client (pure fetch)
+│   │   ├── openai.js             # OpenAI-compatible API client
 │   │   ├── stream-parser.js      # SSE stream parser
 │   │   ├── retry.js              # Exponential backoff retry
 │   │   └── types.js              # Message type factories
 │   ├── agent/
 │   │   ├── orchestrator.js       # ReAct loop orchestrator
+│   │   ├── mention-parser.js     # @file and @skill: mention parser
 │   │   ├── session.js            # Session manager & persistence
 │   │   ├── pruner.js             # Context token pruning
-│   │   └── system-prompt.js      # System instruction builder
+│   │   └── system-prompt.js      # System instruction & skills catalog builder
 │   ├── ui/
 │   │   ├── markdown.js           # ANSI Markdown renderer
 │   │   ├── spinner.js            # Live terminal spinner
@@ -749,6 +852,7 @@ FAY-CLI/
 │   ├── step3-*.test.js           # Unit tests: LLM & Streaming
 │   ├── step4-*.test.js           # Unit tests: ReAct & Session
 │   ├── step5-*.test.js           # Unit tests: REPL & UI
+│   ├── skill-*.test.js           # Unit tests: AI Skills & Installer
 │   └── e2e/
 │       ├── e2e-self-healing.test.js  # E2E: Bug fix loop
 │       ├── e2e-piping.test.js        # E2E: UNIX pipe workflow
@@ -756,7 +860,7 @@ FAY-CLI/
 ├── scripts/
 │   ├── benchmark.js              # Performance benchmark
 │   └── test-e2e.js               # E2E test runner
-├── plans/                        # Development plan documents
+├── docs/                         # Specifications & Implementation plans
 ├── install.sh                    # One-command installer
 ├── package.json
 └── README.md
@@ -796,6 +900,14 @@ MODEL COMMANDS:
   faycli clear                    Shortcut for `faycli model --clear`
   (in REPL) /model                  Interactive picker (TTY) or static box (non-TTY)
   (in REPL) /model <name>           Set the active model from the REPL
+
+SKILL COMMANDS:
+  faycli skill list               List installed AI skills (project & global)
+  faycli skill add <source>       Install skill from GitHub (e.g. owner/repo)
+  faycli skill remove <name>      Remove an installed skill
+  faycli skill info <name>        View skill metadata and details
+  (in REPL) /skill                  Manage skills interactively
+  (in REPL) /skill list|add|remove|info|use
 
 CONFIG COMMANDS:
   faycli config list              List all configuration

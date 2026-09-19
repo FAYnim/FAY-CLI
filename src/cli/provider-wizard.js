@@ -47,7 +47,7 @@ export function isApiKeyRequired(adapter, baseUrl) {
  * >}
  */
 export async function runProviderAddWizard(ctx = {}) {
-  const stream = ctx.stream || process.stdout;
+  const stream = ctx.stream || ctx.output || process.stdout;
   const inputStream = ctx.input || process.stdin;
   const configMgr = ctx.configMgr;
   const prefilledId = ctx.prefilledId || null;
