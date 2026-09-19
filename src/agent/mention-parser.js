@@ -1,0 +1,126 @@
+/**
+ * Prompt File Mention Parser & Context Injector
+ * Extracts @file references and safely embeds file content in LLM messages.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+export const DEFAULT_MAX_FILE_SIZE = 50 * 1024; // 50 KB
+export const DEFAULT_MAX_FILES = 5;
+
+// Regex matching @path/file preceded by start of string or whitespace
+const MENTION_REGEX = /(?:^|\s)@([a-zA-Z0-9_\-\.\/]+)/g;
+
+/**
+ * Check if a buffer contains binary data (contains null bytes)
+ *
+ * @param {Buffer} buffer
+ * @returns {boolean}
+ */
+function isBinaryBuffer(buffer) {
+  const checkLen = Math.min(buffer.length, 1024);
+  for (let i = 0; i < checkLen; i++) {
+    if (buffer[i] === 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Extract all unique valid mention tokens from user text
+ *
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function parseMentions(text) {
+  if (typeof text !== 'string') return [];
+  const matches = new Set();
+  let m;
+  MENTION_REGEX.lastIndex = 0;
+  while ((m = MENTION_REGEX.exec(text)) !== null) {
+    const fileToken = m[1].replace(/^\/+|\/+$/g, '');
+    if (fileToken && !fileToken.endsWith('@')) {
+      matches.add(fileToken);
+    }
+  }
+  return [...matches];
+}
+
+/**
+ * Expand @file mentions by reading target files and appending <context_file> blocks
+ *
+ * @param {string} text - Original user prompt
+ * @param {object} [options={}]
+ * @param {string} [options.workingDir=process.cwd()]
+ * @param {number} [options.maxFileSizeBytes=DEFAULT_MAX_FILE_SIZE]
+ * @param {number} [options.maxFiles=DEFAULT_MAX_FILES]
+ * @returns {{ cleanPrompt: string, injectedPrompt: string, attachedFiles: string[] }}
+ */
+export function expandMentions(text, options = {}) {
+  const cleanPrompt = text || '';
+  if (!cleanPrompt.trim()) {
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+  }
+
+  const workingDir = options.workingDir || process.cwd();
+  const maxSizeBytes = options.maxFileSizeBytes || DEFAULT_MAX_FILE_SIZE;
+  const maxFiles = options.maxFiles || DEFAULT_MAX_FILES;
+
+  const rawMentions = parseMentions(cleanPrompt);
+  if (rawMentions.length === 0) {
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+  }
+
+  const attachedFiles = [];
+  const contextBlocks = [];
+
+  for (const relPath of rawMentions) {
+    if (attachedFiles.length >= maxFiles) break;
+
+    const fullPath = path.resolve(workingDir, relPath);
+
+    // Ensure within workingDir jail
+    if (!fullPath.startsWith(path.resolve(workingDir))) {
+      continue;
+    }
+
+    let stats;
+    try {
+      stats = fs.statSync(fullPath);
+    } catch {
+      continue; // File does not exist
+    }
+
+    if (!stats.isFile()) continue;
+
+    try {
+      const buffer = fs.readFileSync(fullPath);
+      const posixPath = relPath.split(path.sep).join('/');
+
+      if (isBinaryBuffer(buffer)) {
+        contextBlocks.push(`<context_file path="${posixPath}">\n[Binary file omitted]\n</context_file>`);
+        attachedFiles.push(posixPath);
+        continue;
+      }
+
+      if (buffer.length > maxSizeBytes) {
+        const truncated = buffer.subarray(0, maxSizeBytes).toString('utf-8');
+        contextBlocks.push(
+          `<context_file path="${posixPath}">\n${truncated}\n\n[... content truncated: exceeds 50KB limit]\n</context_file>`,
+        );
+      } else {
+        contextBlocks.push(`<context_file path="${posixPath}">\n${buffer.toString('utf-8')}\n</context_file>`);
+      }
+      attachedFiles.push(posixPath);
+    } catch {
+      // Ignore read errors
+    }
+  }
+
+  if (contextBlocks.length === 0) {
+    return { cleanPrompt, injectedPrompt: cleanPrompt, attachedFiles: [] };
+  }
+
+  const injectedPrompt = `${cleanPrompt}\n\n${contextBlocks.join('\n\n')}`;
+  return { cleanPrompt, injectedPrompt, attachedFiles };
+}
