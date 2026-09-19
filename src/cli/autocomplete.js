@@ -11,6 +11,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { discoverSkills } from '../skills/skill-manager.js';
 import { searchWorkspaceFiles } from '../utils/file-index.js';
 import { SLASH_COMMANDS_HELP } from './slash-commands.js';
 
@@ -71,10 +72,18 @@ export function getSuggestions(text, cursor, ctx = {}) {
         .map((n) => ({ value: `/${n}`, label: `/${n}` }));
       return { kind: 'command', items, replaceStart: 0, replaceEnd: cursor };
     }
+    if (before.startsWith('/skill ')) {
+      const subPrefix = before.slice(7).trim().toLowerCase();
+      const subCommands = ['list', 'add', 'remove', 'info', 'use'];
+      const items = subCommands
+        .filter((sub) => !subPrefix || sub.startsWith(subPrefix))
+        .map((sub) => ({ value: `/skill ${sub}`, label: `/skill ${sub}` }));
+      return { kind: 'command', items, replaceStart: 0, replaceEnd: cursor };
+    }
     // whitespace after command → fall through: a later '@' token still suggests files
   }
 
-  // ── File mode: '@' token that starts at string-start or after whitespace ──
+  // ── File or Skill mode: '@' token that starts at string-start or after whitespace ──
   let start = cursor;
   while (start > 0 && !/\s/.test(text[start - 1])) start--;
   let end = cursor;
@@ -82,6 +91,22 @@ export function getSuggestions(text, cursor, ctx = {}) {
   const token = text.slice(start, end);
   if (!token.startsWith('@')) return null;
   if (start > 0 && !/\s/.test(text[start - 1])) return null;
+
+  // ── Skill mode: '@skill:' prefix ──
+  if (token.startsWith('@skill:')) {
+    const skillPrefix = token.slice(7).toLowerCase();
+    const skills = discoverSkills({
+      projectRoot: ctx.projectRoot || ctx.workingDir,
+      homeDir: ctx.homeDir,
+    });
+    const items = skills
+      .filter((s) => !skillPrefix || s.name.toLowerCase().startsWith(skillPrefix))
+      .map((s) => ({
+        value: `@skill:${s.name}`,
+        label: `@skill:${s.name}`,
+      }));
+    return { kind: 'skill', items, replaceStart: start, replaceEnd: end };
+  }
 
   const rel = token.slice(1);
   const base = ctx.workingDir || process.cwd();
@@ -161,4 +186,26 @@ export function getSuggestions(text, cursor, ctx = {}) {
   }
 
   return { kind: 'file', items, replaceStart: start, replaceEnd: end, dir: dirPart };
+}
+
+/**
+ * Compatibility wrapper for getSuggestions returning typed structure.
+ *
+ * @param {string} text
+ * @param {number} cursor
+ * @param {object} [ctx={}]
+ * @returns {{ type: string, items: Array<{ text: string, label: string }>, replaceStart: number, replaceEnd: number }}
+ */
+export function getAutocompleteSuggestions(text, cursor, ctx = {}) {
+  const res = getSuggestions(text, cursor, ctx);
+  if (!res) return { type: 'none', items: [], replaceStart: cursor, replaceEnd: cursor };
+  return {
+    type: res.kind,
+    items: res.items.map((it) => ({
+      text: it.value,
+      label: it.label,
+    })),
+    replaceStart: res.replaceStart,
+    replaceEnd: res.replaceEnd,
+  };
 }
