@@ -99,6 +99,10 @@ export const DEFAULT_CONFIG = {
   verbose: false,
   locale: 'en',
   instructionsFile: 'AGENTS.md',
+  // MCP servers keyed by id. Each entry is
+  // { enabled, command, args[], env{}, cwd?, timeoutMs? }.
+  // Empty by default: no server is ever spawned unless the user adds one.
+  mcpServers: {},
   checkpoint: {
     enabled: true,
     keep: 10,

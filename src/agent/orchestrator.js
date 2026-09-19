@@ -132,6 +132,15 @@ export class AgentOrchestrator {
 
     // Tools
     this.tools = options.tools || getToolDeclarations();
+    // When the caller did not pin a tool list, re-read the registry on every
+    // turn so tools registered at runtime (MCP servers) become visible without
+    // restarting the session. A pinned list is honoured verbatim, which is
+    // what tests and embedding callers rely on.
+    this._dynamicTools = !options.tools;
+
+    // MCP manager (optional) — used by the REPL to connect servers at boot and
+    // by the /mcp slash command to connect one on demand.
+    this.mcpManager = options.mcpManager || null;
 
     // System prompt
     this.systemInstruction = this.getEffectiveSystemInstruction();
@@ -207,15 +216,26 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Returns effective tools allowed for the current mode
+   * Returns effective tools allowed for the current mode.
+   *
+   * When no tool list was pinned at construction, the registry is re-read so
+   * tools registered at runtime (MCP servers) are picked up without a restart.
+   *
    * @returns {Array<object>}
    */
   getEffectiveTools() {
+    const tools = this._dynamicTools ? getToolDeclarations() : this.tools;
+
     if (this.mode !== 'plan') {
-      return this.tools;
+      return tools;
     }
+
+    // Plan mode is read-only research. MCP tools are filtered out rather than
+    // advertised-then-denied, because a tool the model can see but never call
+    // wastes context and produces confusing failure loops. SecurityGuard
+    // enforces the same rule independently.
     const disallowedInPlan = new Set(['patch_file', 'execute_command', 'git_add_commit']);
-    return this.tools.filter((t) => !disallowedInPlan.has(t.name));
+    return tools.filter((t) => !disallowedInPlan.has(t.name) && !t.name.startsWith('mcp__'));
   }
 
   /**

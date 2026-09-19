@@ -38,6 +38,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 12 local tools mapped in `src/tools/registry.js`: `read_file`, `write_file`, `patch_file`, `list_dir`, `execute_command`, `grep_file`, `search_files`, `git_status`, `git_diff`, `git_add_commit`, `web_fetch`, `web_search`.
 - **Argument Normalization**: `TOOL_ARG_ALIASES` normalizes common model hallucinations/aliases (e.g. `path`/`file` -> `filePath`) before tool execution.
 - **Dispatch**: `dispatchToolCall()` validates arguments, routes through `SecurityGuard`, and executes the tool.
+- **Dynamic registration**: `registerTool()` / `unregisterTools()` / `listDynamicTools()` let runtime-registered tools (MCP servers) behave exactly like the builtins — they appear in `getToolDeclarations()` and dispatch through the same path.
+
+### MCP Client (`src/mcp/`)
+
+- **Transport (`src/mcp/client.js`)**: `McpClient` spawns one child process per server and speaks newline-delimited JSON-RPC 2.0 over stdio. Per-request timeout, stderr isolated from the message stream, `close()` ends stdin. No runtime dependency.
+- **Framing & Naming (`src/mcp/protocol.js`)**: `encodeMessage` / `decodeMessages` for line framing; `mcpToolName` / `parseMcpToolName` for the `mcp__<server>__<tool>` namespace. No I/O and no heavy imports, so `security/guard.js` can import it directly.
+- **Schema Conversion (`src/mcp/schema.js`)**: `jsonSchemaToGemini()` maps MCP's standard JSON Schema to the Gemini declaration dialect (UPPERCASE `type`, unsupported keywords dropped). Only one direction is needed — `convertToJsonSchema()` in `llm/openai.js` lowercases types on the way back out.
+- **Lifecycle (`src/mcp/manager.js`)**: `McpManager.connectAll()` reads `mcpServers` from config, connects every entry with `enabled: true`, and registers each tool via `registerTool()`. Failures are collected in `failures`, never thrown.
+- **Security**: MCP tools are gated in `SecurityGuard._authorizeMcp()` — one confirmation per server per session, and blocked entirely in Plan Mode. Spawning a server is equivalent to `execute_command`, so config entries are never enabled by default.
+- **Dynamic registry**: `AgentOrchestrator` re-reads `getToolDeclarations()` each turn when no tool list was pinned (`_dynamicTools`), so a `/mcp add` takes effect without a restart.
+
 
 ### Security Layers (`src/security/`)
 - **`SecurityGuard` (`src/security/guard.js`)**: Defense-in-depth gatekeeper for tool calls.
