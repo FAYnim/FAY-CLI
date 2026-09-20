@@ -57,4 +57,29 @@ description: "Review pull requests and diffs thoroughly."
     assert.ok(res.result.error.includes("Skill 'non-existent' not found"));
     assert.ok(res.result.error.includes('code-review'));
   });
+
+  test('load_skill prevents duplicate loading when skill is already active in session', async () => {
+    const session = { metadata: { loadedSkills: [] } };
+    const loadedSkills = new Set();
+    const context = {
+      workingDir: tmpProject,
+      projectRoot: tmpProject,
+      homeDir: tmpProject,
+      session,
+      loadedSkills,
+    };
+
+    // First load succeeds with full instructions
+    const firstRes = await dispatchToolCall('load_skill', { skill_name: 'code-review' }, context);
+    assert.equal(firstRes.result.success, true);
+    assert.ok(firstRes.result.data.instructions.includes('# Code Review Procedure'));
+    assert.equal(loadedSkills.has('code-review'), true);
+
+    // Second load returns already_loaded = true without re-dumping instructions
+    const secondRes = await dispatchToolCall('load_skill', { skill_name: 'code-review' }, context);
+    assert.equal(secondRes.result.success, true);
+    assert.equal(secondRes.result.data.already_loaded, true);
+    assert.equal(secondRes.result.data.instructions, undefined);
+    assert.match(secondRes.result.data.message, /already loaded/i);
+  });
 });

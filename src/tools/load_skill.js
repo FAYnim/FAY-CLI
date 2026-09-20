@@ -17,6 +17,28 @@ export async function loadSkillTool(args, context = {}) {
     };
   }
 
+  // Guard against repetitive loading in the same session
+  const sessionMetadata = context.session?.metadata;
+  const loadedSkills =
+    context.loadedSkills ||
+    (sessionMetadata?.loadedSkills ? new Set(sessionMetadata.loadedSkills) : null);
+  const isAlreadyLoaded = loadedSkills
+    ? Array.isArray(loadedSkills)
+      ? loadedSkills.includes(skillName)
+      : loadedSkills.has?.(skillName)
+    : false;
+
+  if (isAlreadyLoaded) {
+    return {
+      success: true,
+      data: {
+        name: skillName,
+        already_loaded: true,
+        message: `Skill '${skillName}' is already loaded and active in the current session. Do not re-load this skill; proceed directly with your task.`,
+      },
+    };
+  }
+
   const projectRoot = context.projectRoot || context.workingDir || process.cwd();
   const homeDir = context.homeDir;
 
@@ -27,6 +49,19 @@ export async function loadSkillTool(args, context = {}) {
       success: false,
       error: `Skill '${skillName}' not found. Available skills: ${available.length > 0 ? available.join(', ') : 'none'}.`,
     };
+  }
+
+  // Record skill as loaded in context and session metadata
+  if (context.loadedSkills?.add) {
+    context.loadedSkills.add(skillName);
+  }
+  if (sessionMetadata) {
+    if (!Array.isArray(sessionMetadata.loadedSkills)) {
+      sessionMetadata.loadedSkills = [];
+    }
+    if (!sessionMetadata.loadedSkills.includes(skillName)) {
+      sessionMetadata.loadedSkills.push(skillName);
+    }
   }
 
   return {

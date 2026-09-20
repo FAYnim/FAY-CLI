@@ -641,6 +641,33 @@ const BLOCK_EXTRACTORS = [
       }
     },
   },
+  {
+    // [Tool Call: tool_name({...})] or [tool_call: tool_name: {...}] or [call: tool_name({...})]
+    // Matches bracketed pseudo-call syntax emitted when models output tool calls in prose.
+    pattern: /\[(?:Tool Call|tool_call|call|TOOL|Tool_Call):\s*([a-zA-Z0-9_]+)(?:(?:\s*\(([\s\S]*?)\))|(?:\s*:\s*(\{[\s\S]*?\}))|(?:\s+(\{[\s\S]*?\})))?\s*\]/gi,
+    interpret(match, addCall) {
+      const toolName = match[1]?.trim();
+      const rawPayload = (match[2] ?? match[3] ?? match[4])?.trim();
+      if (!toolName) return;
+      if (!rawPayload || rawPayload === '{}' || rawPayload === '()') {
+        addCall(toolName, {});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(rawPayload);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          addCall(toolName, parsed);
+        }
+      } catch (err) {
+        const loose = extractJsonLoose(rawPayload);
+        if (loose && typeof loose === 'object' && !Array.isArray(loose)) {
+          addCall(toolName, loose);
+        } else {
+          logger.debug('openai.parseTextToolCalls: bracketed call parse failed', err);
+        }
+      }
+    },
+  },
 ];
 
 /** Extracts the first `Action:` / `Action Input:` pair (ReAct-style output). */
@@ -659,12 +686,12 @@ function extractActionLineCall(text, addCall) {
 /**
  * Extracts a bare tool name followed by a JSON object.
  * Strictly requires the tool name to be at the start of a line (or immediately
- * following an opening <tool_call> tag) with a valid delimiter (: | <tool_sep> | \n | whitespace),
+ * following an opening <tool_call> tag) with a valid delimiter (: | <tool_sep> | \n | whitespace | ( ),
  * preventing false-positive execution from tool names mentioned in prose mid-sentence.
  */
 function extractInlineNameCalls(text, addCall) {
   const inlinePattern = new RegExp(
-    `(?:^|\\n|<tool_call>)\\s*(${TEXT_TOOL_NAMES_SOURCE})(?:\\s*:\\s*|\\s*<tool_sep>\\s*|\\s*\\n\\s*|\\s+)(\\{[\\s\\S]*?\\})`,
+    `(?:^|\\n|<tool_call>)\\s*(${TEXT_TOOL_NAMES_SOURCE})(?:\\s*:\\s*|\\s*<tool_sep>\\s*|\\s*\\n\\s*|\\s+|\\s*\\()(\\{[\\s\\S]*?\\})\\)?`,
     'gi',
   );
   for (const match of text.matchAll(inlinePattern)) {

@@ -377,4 +377,49 @@ describe('parseTextToolCalls', () => {
       ]);
     });
   });
+
+  describe('pattern: bracketed pseudo-call format ([Tool Call: ...])', () => {
+    test('extracts [Tool Call: execute_command({"command":"ls -la"})]', () => {
+      const text = '[Tool Call: execute_command({"command":"ls -la"})]';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'execute_command', args: { command: 'ls -la' } },
+      ]);
+    });
+
+    test('extracts [Tool Call: execute_command: {"command": "git status"}]', () => {
+      const text = '[Tool Call: execute_command: {"command": "git status"}]';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'execute_command', args: { command: 'git status' } },
+      ]);
+    });
+
+    test('extracts [tool_call: read_file({"filePath": "README.md"})]', () => {
+      const text = '[tool_call: read_file({"filePath": "README.md"})]';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'read_file', args: { filePath: 'README.md' } },
+      ]);
+    });
+
+    test('extracts [call: list_dir({"dirPath": "."})]', () => {
+      const text = '[call: list_dir({"dirPath": "."})]';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'list_dir', args: { dirPath: '.' } },
+      ]);
+    });
+
+    test('extracts [Tool Call: git_status()] with empty arguments', () => {
+      const text = '[Tool Call: git_status()]';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'git_status', args: {} },
+      ]);
+    });
+
+    test('extracts inline name call with parentheses on its own line', () => {
+      const text = 'Sure, executing now:\nexecute_command({"command": "npm test"})';
+      assert.deepEqual(parseTextToolCalls(text), [
+        { name: 'execute_command', args: { command: 'npm test' } },
+      ]);
+    });
+  });
 });
+
