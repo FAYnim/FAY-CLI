@@ -92,6 +92,8 @@ export class AgentOrchestrator {
         workingDir: this.workingDir,
       });
 
+    this._loadedSkills = new Set();
+
     // Sync mode with security guard if available
     if (this.securityGuard && typeof this.securityGuard.setMode === 'function') {
       this.securityGuard.setMode(this.mode);
@@ -431,6 +433,19 @@ export class AgentOrchestrator {
 
       // Step 3: Handle Pure Text Response (No tool calls)
       if (!functionCalls || functionCalls.length === 0) {
+        const hasUnparsedAttempt =
+          /\[(?:Tool Call|tool_call|call|TOOL|Tool_Call):\s*([a-zA-Z0-9_]+)/i.test(text);
+        if (hasUnparsedAttempt && currentIteration < maxIters) {
+          this.logger.warn(
+            'Detected unparseable tool call syntax in text response. Prompting for correction.',
+          );
+          this.session.addModelMessage(text);
+          this.session.addUserMessage(
+            '[System Notice]: Your response attempted a tool call but could not be parsed. ' +
+              'Please invoke the tool directly using the standard tool call format or verify arguments.',
+          );
+          continue;
+        }
         finalText = text;
         this.session.addModelMessage(text);
         break; // Successfully concluded the ReAct loop
@@ -474,6 +489,8 @@ export class AgentOrchestrator {
           securityGuard: this.securityGuard,
           checkpointManager: this.checkpointManager,
           sessionId: this.session?.id,
+          session: this.session,
+          loadedSkills: this._loadedSkills,
           baseDir: this.workingDir,
           logger: this.logger,
           signal,
@@ -542,6 +559,25 @@ export class AgentOrchestrator {
         }
       }
 
+      // Step 5.4: Repeating tool loop detection (e.g. repeated tool calls with identical arguments)
+      const recentCalls = executedToolCalls.slice(-6);
+      if (recentCalls.length >= 4) {
+        const lastCall = recentCalls[recentCalls.length - 1];
+        const sameCallCount = recentCalls.filter(
+          (c) =>
+            c.name === lastCall.name && JSON.stringify(c.args) === JSON.stringify(lastCall.args),
+        ).length;
+        if (sameCallCount >= 3) {
+          this.logger.warn(
+            `Detected repeating tool call loop on "${lastCall.name}". Injecting break instruction.`,
+          );
+          this.session.addUserMessage(
+            `[System Instruction]: You have repeatedly executed "${lastCall.name}" with identical arguments. ` +
+              `Do not invoke "${lastCall.name}" again. Move forward immediately with the task.`,
+          );
+        }
+      }
+
       // Step 5.5: Record for reflection and run periodic check
       if (reflectionChecker) {
         reflectionChecker.record(currentIteration, executedToolCalls);
@@ -554,6 +590,20 @@ export class AgentOrchestrator {
             if (verdict.finish) {
               this.logger.info(`[Reflection] Stopping early — ${verdict.reason}`);
               break;
+            } else if (verdict.reason && typeof verdict.reason === 'string') {
+              const reasonLower = verdict.reason.toLowerCase();
+              if (
+                reasonLower.includes('not started') ||
+                reasonLower.includes('stuck') ||
+                reasonLower.includes('repetitive') ||
+                reasonLower.includes('loading skills') ||
+                reasonLower.includes('loop')
+              ) {
+                this.session.addUserMessage(
+                  `[System Guidance]: Reflection evaluation observed: "${verdict.reason}". ` +
+                    `Stop inspecting or loading skills. Please proceed directly to execute concrete work for the task.`,
+                );
+              }
             }
           } catch (refErr) {
             this.logger.warn(
